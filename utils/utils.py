@@ -9,6 +9,7 @@ import torch
 import torchvision.utils as vutils
 
 from utils.augmentation import Denormalize
+from utils.action_encodings import sims_simple_dataset_encoding
 
 plt.switch_backend('agg')
 
@@ -243,54 +244,63 @@ class ConfusionMeter(object):
 
 
 def balanced_acc(csv_path='results_test_sims_frac_s3d_32f.csv'):
-	sims_simple_dataset_encoding = {
-	    "Cook":         0,
-	    "Drink":        1,
-	    "Eat":          2,
-	    "Getup":        3,
-	    "Readbook":     4,
-	    "Usecomputer":  5,
-	    "Usephone":     6,
-	    "Usetablet":    7,
-	    "Walk":         8,
-	    "WatchTV":      9
-	    }
-	actions = list({val: key for key, val in sims_simple_dataset_encoding.items()}.values())
+	'''compute and plot normal and balanced accuracies and save them results in .csv'''
 	import pandas as pd
 	import numpy as np
 	from matplotlib import pyplot as plt
+	# Setup
 	df = pd.read_csv(csv_path)
-	acc_dict = {}
+
 	classes = sorted(df['label'].unique())
+	pred_columns = ['pred1', 'pred2', 'pred3', 'pred4', 'pred5']	
+	actions = list({val: key for key, val in sims_simple_dataset_encoding.items()}.values())
 	balanced_accs = []
+	acc_dict = {}
+
+	# Top-1, -3, -5 normal and balanced prediction accuracy
 	for c in classes:
 		x = df[df['label'] == c] 
-		balanced_acc = len(x[x['pred1'] == c]) / len(x)
-		balanced_accs.append(balanced_acc)
-	mean_balanced_acc = sum(balanced_accs) / len(balanced_accs)
-	normal_acc = len(df[df['label'] != df['pred1']]) / len(df)
+		x_1, x_2, x_3, x_4, x_5 = [x[p] == c for p in pred_columns]
+		balanced_acc1 = len(x[x_1]) / len(x)
+		balanced_acc3 = len(x[x_1 | x_2 | x_3]) / len(x)
+		balanced_acc5 = len(x[x_1 | x_2 | x_3 | x_4 | x_5]) / len(x) 
+		balanced_accs.append(np.array([balanced_acc1, balanced_acc3, balanced_acc5]))
+	balanced_accs = np.array(balanced_accs)
+	
+	# Mean Balanced 1,3,5 accuracies
+	mean_balanced_accs = np.mean(balanced_accs, axis = 0)
+	[x_1, x_2, x_3, x_4, x_5] = [df['label'] == df[p] for p in pred_columns]
+	normal_acc1 = len(df[x_1]) / len(df)
+	normal_acc3 = len(df[x_1 | x_2 | x_3]) / len(df)
+	normal_acc5 = len(df[x_1 | x_2 | x_3 | x_4 | x_5]) / len(df)
 
-	print('Balanced accuracies:', balanced_accs)
-	print('Mean balanced accuracy:', mean_balanced_acc)
-	print('Normal accuracy:', normal_acc)
+	print('Balanced accuracies: \n', balanced_accs)
+	print('Mean balanced accuracy [top1, top3, top5]:', mean_balanced_accs)
+	print('Normal accuracy top1:', normal_acc1)
 
 	acc_dict['Action_Name'] = actions
 	acc_dict['Action_ID'] = range(len(actions))
-	acc_dict['Balanced_Accuracies'] =  np.array(balanced_accs)
-	acc_dict['Mean_Balanced_Accuracy'] = mean_balanced_acc
-	acc_dict['Normal Accuracy'] = normal_acc
+	acc_dict['Balanced_Accuracies Top1'] =  np.array(balanced_accs[:,0])
+	acc_dict['Balanced_Accuracies Top3'] =  np.array(balanced_accs[:,1])
+	acc_dict['Balanced_Accuracies Top5'] =  np.array(balanced_accs[:,2])
+	acc_dict['Mean_Balanced_Accuracy Top1'] = mean_balanced_accs[0]
+	acc_dict['Mean_Balanced_Accuracy Top3'] = mean_balanced_accs[1]
+	acc_dict['Mean_Balanced_Accuracy Top5'] = mean_balanced_accs[2]
+	acc_dict['Normal_Accuracy Top1'] = normal_acc1
+	acc_dict['Normal_Accuracy Top3'] = normal_acc3
+	acc_dict['Normal_Accuracy Top5'] = normal_acc5
 
 	acc_df = pd.DataFrame(acc_dict)
 
-	plt.bar(range(10), balanced_accs, label='Balanced Accuracies')
-	plt.plot(np.ones(10) * mean_balanced_acc, 'r--', label = 'Mean balanced accuracy',)
+	plt.bar(range(10), balanced_accs[:,0], label='Balanced Accuracies Top1')
+	plt.plot(np.ones(10) * mean_balanced_accs[0], 'r--', label = 'Mean balanced accuracy Top1: ' + str(round(mean_balanced_accs[0], 2)))
+	plt.plot(np.ones(10) * normal_acc1, 'g--', label = 'Normal accuracy Top1: ' + str(round(normal_acc1, 2)))
 	plt.xticks(range(10), actions, rotation=45)
 	plt.legend()
 	plt.tight_layout()
-	plt.savefig(csv_path[:-3] +'_balanced_accuracies.png')
+	plt.savefig(csv_path[:-3] +'_balanced_accuracies_top1.png')
 
 	acc_df.to_csv(csv_path[:-3] + '_balanced_accuracies.csv', index=False)
-
 
 def write_out_checkpoint(epoch, iteration, model, optimizer, args, train_loss, train_acc, val_loss, val_acc,
                          best_train_loss, best_train_acc, best_val_loss, best_val_acc, alt_path=None):
