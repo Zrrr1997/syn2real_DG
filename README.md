@@ -1,4 +1,4 @@
-# Sims_ActionReco_Code
+# MA Domain Adaptation
 
 Repository for the implementation of models/data loaders/etc. for the project on Recognizing Activities of Daily Living from Life Simulations Video Games (Sims 4).
 
