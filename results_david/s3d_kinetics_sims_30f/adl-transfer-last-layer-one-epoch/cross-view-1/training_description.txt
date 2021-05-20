@@ -1,0 +1,55 @@
+Start of training: 2021-03-05_13-34-37
+Git describe of repo: 69c4d5c
+
+aug_contrast_range: [0.0]
+aug_crop_max_area: 1.0
+aug_crop_min_area: 0.05
+aug_hue_range: [0.5]
+aug_rotation_range: [20.0]
+aug_saturation_range: [1]
+aug_value_range: [0.8]
+batch_size: 64
+dataset: adl
+dataset_skele_motion_root: /home/david/datasets/sims_dataset/skele-motion
+dataset_video_root: /media/david/damysus/datasets/adl/frames
+ds_vid: 1
+epochs: 1
+exp_num: 10
+exp_path: ./experiments/exp_10
+exp_root: ./experiments
+gpu: [0, 1]
+ignore_old_metrics: False
+img_dim: 128
+last_layer_only: True
+loader_workers: 16
+log_path: ./experiments/exp_10/logs
+lr: 0.0001
+lr_step_decrease: 0.1
+model_body: skelemotion
+model_path: ./experiments/exp_10/model
+model_vid: s3d
+new_optimizer: False
+no_cache: False
+num_classes: 31
+optim: Adam
+pretrained_model_s3d: /home/david/experiments/sims_acre/S3D_30f_pretrained/model/model_best_val_acc.pth.tar
+print_freq: 10
+save_best_train_acc: False
+save_best_train_loss: True
+save_best_val_acc: True
+save_best_val_loss: False
+save_interval: 200
+score_function: cross-entropy
+seq_len: 30
+sgd_momentum: 0.9
+skip_val: False
+split_policy: cross-view-1
+split_test_frac: 0.1
+split_val_frac: 0.1
+start_epoch: 0
+start_iteration: 0
+test_only: False
+test_prediction_only: False
+training_focus: all
+training_stream: vid
+wd: 0.0001

@@ -1,0 +1,51 @@
+Start of training: 2021-03-03_09-43-51
+Git describe of repo: 7d59bb8
+
+aug_contrast_range: [0.0]
+aug_crop_max_area: 1.0
+aug_crop_min_area: 0.05
+aug_hue_range: [0.5]
+aug_rotation_range: [20.0]
+aug_saturation_range: [1]
+aug_value_range: [0.8]
+batch_size: 16
+dataset: sims
+dataset_skele_motion_root: /home/dschneider/datasets/sims_dataset/skele-motion
+dataset_video_root: /tmp/dschneider/datasets/SimsVids/frames_real/frames
+ds_vid: 1
+epochs: 100
+exp_num: 31
+exp_path: ./experiments/exp_31
+exp_root: ./experiments
+gpu: [0, 1]
+img_dim: 128
+loader_workers: 20
+log_path: ./experiments/exp_31/logs
+lr: 1e-05
+lr_step_decrease: 0.1
+model_body: skelemotion
+model_path: ./experiments/exp_31/model
+model_vid: s3d
+no_cache: True
+num_classes: 10
+optim: Adam
+pretrained_model_s3d: /cvhci/data/dschneider/models/s3d_pretrained.pth.tar
+print_freq: 10
+save_best_train_acc: False
+save_best_train_loss: True
+save_best_val_acc: True
+save_best_val_loss: False
+save_interval: 200
+score_function: cross-entropy
+seq_len: 64
+sgd_momentum: 0.9
+split_policy: file
+split_test_frac: 0.1
+split_val_frac: 0.1
+start_epoch: 0
+start_iteration: 0
+test_only: False
+train_split_file: /cvhci/data/dschneider/SimsVid/SimsSplitsCompleteVideos.csv
+training_focus: all
+training_stream: vid
+wd: 0.0001
