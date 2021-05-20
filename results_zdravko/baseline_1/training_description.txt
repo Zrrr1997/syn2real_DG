@@ -1,5 +1,5 @@
-Start of training: 2021-05-20_13-37-20
-Git describe of repo: bca38f2
+Start of training: 2021-05-20_17-00-02
+Git describe of repo: ba8ad2b
 
 aug_contrast_range: [0.0]
 aug_crop_max_area: 1.0
@@ -14,25 +14,25 @@ dataset_skele_motion_root: /home/zmarinov/datasets/sims_dataset/skele-motion
 dataset_video_root: /cvhci/data/activity/Sims4Action/frames
 ds_vid: 1
 epochs: 200
-exp_num: 2
-exp_path: ./experiments/exp_2
+exp_num: 1
+exp_path: ./experiments/exp_1
 exp_root: ./experiments
 gpu: [0, 1]
 ignore_old_metrics: False
 img_dim: 128
 last_layer_only: False
 loader_workers: 4
-log_path: ./experiments/exp_2/logs
+log_path: ./experiments/exp_1/logs
 lr: 0.0001
 lr_step_decrease: 0.1
 model_body: skelemotion
-model_path: ./experiments/exp_2/model
+model_path: ./experiments/exp_1/model
 model_vid: s3d
 new_optimizer: False
 no_cache: False
 num_classes: 10
 optim: Adam
-pretrained_model_s3d: /home/zmarinov/sims_actionreco_code/experiments/exp_3/model/model_best_val_acc.pth.tar
+pretrained_model_s3d: /home/zmarinov/sims_actionreco_code/experiments/exp_2/model/model_best_val_acc.pth.tar
 print_freq: 10
 save_best_train_acc: False
 save_best_train_loss: True
