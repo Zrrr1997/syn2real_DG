@@ -298,7 +298,9 @@ def balanced_acc(csv_path='results_test_sims_frac_s3d_32f.csv'):
 	plt.xticks(range(10), actions, rotation=45)
 	plt.legend()
 	plt.tight_layout()
-	plt.savefig(csv_path[:-3] +'_balanced_accuracies_top1.png')
+	plt.savefig(csv_path[:-3] +'_balanced_accuracies_top1.svg')
+	plt.clf()
+	plt.close()
 
 	acc_df.to_csv(csv_path[:-3] + '_balanced_accuracies.csv', index=False)
 
