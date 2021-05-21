@@ -8,8 +8,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from datasets.generic_action_dataset import GenericActionDataset
-from utils.action_encodings import adl_dataset_encoding, adl_dataset_decoding, sims_simple_dataset_encoding, sims_simple_dataset_decoding
-from utils.utils import toyota_to_sims_df
+from utils.action_encodings import adl_dataset_encoding, adl_dataset_decoding
 
 
 class ADLDataset(GenericActionDataset):
@@ -33,12 +32,10 @@ class ADLDataset(GenericActionDataset):
                  cache_folder="cache",
                  random_state=42,
                  per_class_samples=None,
-                 test_on_sims=False,
                  dataset_name="ADL Dataset") -> None:
         # TODO: I think its bad style to place this before super, but currently it has to be here.
         self.action_pat_complex = re.compile(r"(.+)\.(.+)_p(\d\d)_r(\d\d)_v(\d\d)_c(\d\d)")
         self.action_pat_simple = re.compile(r"([^._]+)_p(\d\d)_r(\d\d)_v(\d\d)_c(\d\d)")
-        self.test_on_sims = test_on_sims
 
         super().__init__(dataset_root=dataset_root,
                          split_mode=split_mode,
@@ -63,9 +60,6 @@ class ADLDataset(GenericActionDataset):
 
         self.action_dict_encode = adl_dataset_encoding
         self.action_dict_decode = adl_dataset_decoding
-        if self.test_on_sims:
-            self.action_dict_encode = sims_simple_dataset_encoding
-            self.action_dict_decode = sims_simple_dataset_decoding
 
     def __getitem__(self, index):# -> T_co:
         return super().__getitem__(index)
@@ -86,9 +80,7 @@ class ADLDataset(GenericActionDataset):
         :return:
         """
         file = os.path.split(path)[1]
-        match = self.action_pat_simple.match(file)
-        match_complex = self.action_pat_complex.match(file)
-        if match:
+        if match == self.action_pat_simple.match(file):
             action = match.group(1)
             sub_action = None
             person = match.group(2)
@@ -96,13 +88,13 @@ class ADLDataset(GenericActionDataset):
             # v = match.group(4) -> ?
             camera = match.group(5)
 
-        elif match_complex:
-            action = match_complex.group(1)
-            sub_action = match_complex.group(2)
-            person = match_complex.group(3)
+        elif match == self.action_pat_complex.match(file):
+            action = match.group(1)
+            sub_action = match.group(2)
+            person = match.group(3)
             # r = match.group(4) -> ?
             # v = match.group(5) -> ?
-            camera = match_complex.group(6)
+            camera = match.group(6)
         else:
             raise ValueError
 
@@ -142,11 +134,9 @@ class ADLDataset(GenericActionDataset):
                      "frame_count": list(tqdm(map(lambda p: GenericActionDataset.count_frames(p), video_paths)))}
 
             video_info = pd.DataFrame(vinfo)
-            if self.split_mode == 'test' and self.test_on_sims:
-                video_info = toyota_to_sims_df(video_info)
-                print("Filtered Toyota->Sims Actions", video_info['action'].unique())
+            print('ADL Actions:', video_info['action'].unique())
 
-            if cache_folder is not None and not self.test_on_sims:
+            if cache_folder is not None:
                 if not os.path.exists(cache_folder):
                     os.makedirs(cache_folder)
                 video_info.to_csv(os.path.join(cache_folder, vid_cache_name))

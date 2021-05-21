@@ -91,6 +91,7 @@ parser.add_argument('--print_freq', default=10, type=int, help='Iteration freque
 parser.add_argument('--no_cache', action='store_true', default=False, help='Do not use cached dataset info (reindex).')
 parser.add_argument('--test_only', action='store_true', default=False, help='Skip training.')
 parser.add_argument('--test_prediction_only', action='store_true', default=False, help='Skip training.')
+parser.add_argument('--test_on_sims', action='store_true', default=False, help='Test domain adaptation on a dataset (e.g. ADL) with a model trained on Sims')
 parser.add_argument('--ignore_old_metrics', action='store_true', default=False, help='Ignore old metrics.')
 parser.add_argument('--new_optimizer', action='store_true', default=False, help='Ignore stored optimizer on resuming.')
 parser.add_argument('--last_layer_only', action='store_true', default=False, help='Only train last layer.')
@@ -322,6 +323,7 @@ def get_data(vid_transform, mode='train', args=None, random_state=42):
                              sample_limit=args.max_samples,
                              use_cache=not args.no_cache,
                              per_class_samples=args.per_class_samples,
+                             test_on_sims=args.test_on_sims,
                              random_state=random_state)
     else:
         raise ValueError('dataset not supported')

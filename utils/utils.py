@@ -302,6 +302,29 @@ def balanced_acc(csv_path='results_test_sims_frac_s3d_32f.csv'):
 
 	acc_df.to_csv(csv_path[:-3] + '_balanced_accuracies.csv', index=False)
 
+''' Map Toyota-Smarthome actions to Sims actions '''
+def toyota_to_sims_df(video_info_arg):
+	import pandas as pd
+
+	video_info = video_info_arg.copy()
+	relevant_actions = ['Cook.Cut', 'Cook.Stir', 'Cook.Usestove', 'Drink.Frombottle', 'Drink.Fromcan', 'Drink.Fromcup', 'Drink.Fromglass', 'Eat.Attable', 'Getup', 'Readbook', 'Sitdown', 'Uselaptop', 'Usetablet', 'Usetelephone', 'Walk', 'WatchTV']
+	sims_corresponding_actions = ['Cook', 'Cook', 'Cook', 'Drink', 'Drink', 'Drink', 'Drink', 'Eat', 'Getup', 'Readbook', 'Getup', 'Usecomputer', 'Usetablet', 'Usephone', 'Walk', 'WatchTV']
+
+	# Leave only relevant actions
+	action_filter = [video_info['action'] == a for a in relevant_actions]
+	OR_action_filter = action_filter[0] * False 
+	for a in action_filter:
+		OR_action_filter |= a
+	video_info = video_info[OR_action_filter]
+	print("Filtered Actions", video_info['action'].unique())
+	
+	# Map Toyota actions to sims actions
+	for (toyota_action, sims_action) in zip(relevant_actions, sims_corresponding_actions):
+		video_info.loc[(video_info.action == toyota_action),'action'] = sims_action
+	return video_info
+	
+
+
 def write_out_checkpoint(epoch, iteration, model, optimizer, args, train_loss, train_acc, val_loss, val_acc,
                          best_train_loss, best_train_acc, best_val_loss, best_val_acc, alt_path=None):
     state = {'epoch':           epoch + 1,
