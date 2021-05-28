@@ -11,6 +11,7 @@ from torchvision import transforms
 import utils.augmentation
 from datasets.adl_dataset import ADLDataset
 from datasets.sims_dataset import SimsDataset
+from datasets.sims_dataset_video import SimsDataset_Video
 from lib.C3D import C3D
 from lib.i3d_hassony import I3D, Unit3Dpy
 from lib.s3d import S3D
@@ -40,7 +41,7 @@ parser.add_argument('--loader_workers', default=16, type=int,
 parser.add_argument('--epochs', default=200, type=int, help='number of total epochs to run.')
 parser.add_argument('--batch_size', default=28, type=int, help="Make batch size divisible by GPU count.")
 
-parser.add_argument('--dataset', default='sims', choices=["sims", "adl", "nturgbd"], type=str)
+parser.add_argument('--dataset', default='sims', choices=["sims", "adl", "nturgbd", "sims_video"], type=str)
 parser.add_argument('--num_classes', default=10, type=int, help='Number of classes for the classification task.')
 
 parser.add_argument('--split-policy', default='frac',
@@ -62,6 +63,8 @@ parser.add_argument('--seq_len', default=32, type=int, help='This is the base nu
 parser.add_argument('--ds_vid', default=1, type=int, help='Downsampling rate. (use every n-th frame).')
 
 parser.add_argument('--img_dim', default=128, type=int, help="The image dimension of the frames (will be squared).")
+
+parser.add_argument('--modality', default="heatmaps", type=str, help="The modality on which to train on.")
 
 parser.add_argument('--model_vid', default="s3d", type=str, choices=["s3d", "s3dg", "i3d", "r2+1d", "r18"],
                     help="The model for the video backbone.")
@@ -129,6 +132,8 @@ parser.add_argument('--aug_contrast_range', default=[0.0], type=float, nargs='+'
 
 parser.add_argument('--aug_crop_min_area', default=0.05, type=float)
 parser.add_argument('--aug_crop_max_area', default=1., type=float)
+parser.add_argument('--no_augmentation', action='store_true', default=False, type=bool,
+                    help='Do not apply data augmentation to the training dataset.')
 
 
 def argument_checks(args):
@@ -276,6 +281,7 @@ def select_and_prepare_model(args):
 
 
 def prepare_augmentations(augmentation_settings, args):
+
     transform_train = transforms.Compose([
         utils.augmentation.RandomRotation(degree=augmentation_settings["rot_range"]),
         utils.augmentation.RandomSizedCrop(size=args.img_dim, crop_area=augmentation_settings["crop_arr_range"],
@@ -286,6 +292,14 @@ def prepare_augmentations(augmentation_settings, args):
         utils.augmentation.ToTensor(),
         utils.augmentation.Normalize()
         ])
+    if args.no_augmenation:
+        print("Not using any data augmentation for the heatmap/limbs/optical_fow modality")
+        transform_train = transforms.Compose([
+            utils.augmentation.Scale(size=args.img_dim),
+            utils.augmentation.CenterCrop(size=args.img_dim, consistent=True),
+            utils.augmentation.ToTensor(),
+            utils.augmentation.Normalize()
+            ])
 
     transform_test = transforms.Compose([
         utils.augmentation.Scale(size=args.img_dim),
@@ -325,6 +339,20 @@ def get_data(vid_transform, mode='train', args=None, random_state=42):
                              per_class_samples=args.per_class_samples,
                              test_on_sims=args.test_on_sims,
                              random_state=random_state)
+    elif args.dataset == 'sims_video':
+        dataset = SimsDataset_Video(dataset_root=args.dataset_video_root,
+                             split_mode=mode,
+                             split_train_file=args.train_split_file,
+                             vid_transform=vid_transform,
+                             seq_len=args.seq_len,
+                             seq_shifts=args.sampling_shift,
+                             downsample_vid=args.ds_vid,
+                             split_policy=args.split_policy,
+                             sample_limit=args.max_samples,
+                             use_cache=not args.no_cache,
+                             per_class_samples=args.per_class_samples,
+                             random_state=random_state,
+                             modality=args.modality)
     else:
         raise ValueError('dataset not supported')
 

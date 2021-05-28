@@ -372,7 +372,8 @@ class GenericActionDataset(data.Dataset):
             with Image.open(f) as img:
                 img.load()
                 return img.convert('RGB')
-
+    
+    
     def prepare_chunks(self, video_info: pd.DataFrame, chunk_length):
         video_info["chunk_count"] = (video_info["frame_count"] // chunk_length).apply(lambda v: max(v, 1))
         video_info["chunk_start_idx"] = 0
@@ -384,6 +385,9 @@ class GenericActionDataset(data.Dataset):
             chunk_to_vid_idx.extend([idx] * row.chunk_count)
 
         return video_info, chunk_to_vid_idx
+    
+
+
 
 
 if __name__ == "__main__":
