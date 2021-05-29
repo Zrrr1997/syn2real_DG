@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
-from PIL import Image
+from PIL import Image, ImageOps
 from tqdm import tqdm
 from datasets.generic_action_dataset import GenericActionDataset
 
@@ -33,9 +33,11 @@ class GenericActionDataset_Video(GenericActionDataset):
                  per_class_samples=None,
                  test_on_sims=False,
                  dataset_name="Generic Acton Dataset for Videos",
-                 modality="heatmaps") -> None:
+                 modality="heatmaps",
+                 n_channels=3) -> None:
 
         self.modality = modality
+        self.n_channels=n_channels
         super().__init__(dataset_root=dataset_root,
                          split_mode=split_mode,
                          vid_transform=vid_transform,
@@ -59,7 +61,6 @@ class GenericActionDataset_Video(GenericActionDataset):
 
     def __getitem__(self, index): # -> T_co:
         ret_dict = {}
-
         gad_v = GenericActionDataset_Video
         if self.chunk_length is None:
             # operating on videos
@@ -70,8 +71,6 @@ class GenericActionDataset_Video(GenericActionDataset):
             vid_idx = self.chunk_to_vid_idxs[index]
             sample = self.video_info.loc[vid_idx]
             chunk = index - sample["chunk_start_idx"]
-
-
             start_frame = self.chunk_length * chunk
             end_frame = self.chunk_length * (chunk + 1)
             ret_dict["chunk"] = chunk
@@ -83,16 +82,17 @@ class GenericActionDataset_Video(GenericActionDataset):
 
         if "vclip" in self.return_data:
             v_len = sample["frame_count"]
-            random_first = np.random.randint(low=start_frame, high=end_frame - self.seq_len - 1)
-            frame_indices_vid = [np.arange(random_first, random_first + self.seq_len,  1)]
-
+            frame_indices = gad_v.idx_sampler(v_len, self.seq_len, sample["vid_path"], self.seq_shifts,
+                                            frame_range=(start_frame, end_frame))
+            frame_indices_vid = [idxs[::self.downsample_vid] for idxs in frame_indices]
 
             # Read only [start_frame - end_frame] from video with cv2.VideoCapture
-            seq_vid = gad_v.frame_loader(frame_indices_vid[0],  os.path.join(self.dataset_root, sample["vid_path"], self.modality + '.avi'), v_len)
+            seq_vid = gad_v.frame_loader(frame_indices_vid[0],  os.path.join(self.dataset_root, sample["vid_path"], self.modality + '.avi'), self.n_channels)
 
             t_seq = self.vid_transform(seq_vid)
-            del seq_vid
 
+            del seq_vid
+            # (self.seq_len, C, H, W) -> (C, self.seq_len, H, W)
             ret_dict["vclip"] = torch.stack(t_seq, 0).transpose(0, 1)
 
         if "skmotion" in self.return_data:
@@ -155,13 +155,20 @@ class GenericActionDataset_Video(GenericActionDataset):
 
 
     @staticmethod
-    def frame_loader(frame_indices, path, vlen):
+    def frame_loader(frame_indices, path, n_channels):
         assert len(frame_indices) != 0
         cap = cv2.VideoCapture(path)
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_indices[0])
         seq = []
         for i in range(len(frame_indices)):
-            seq.append(Image.fromarray(cap.read()[1]))
+            if n_channels == 3:
+               seq.append(Image.fromarray(cap.read()[1]))
+            elif n_channels == 1:
+               img = cap.read()[1]
+               seq.append(Image.fromarray(img[:,:,0].reshape((img.shape[0], img.shape[1])), 'L'))
+            else:
+               raise NotImplementedError()
+
         cap.release()
         return seq
 

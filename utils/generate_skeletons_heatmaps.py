@@ -86,6 +86,32 @@ def integer_to_filename(num, length = 5):
     base = '0' * length
     return (base + str(num))[-length:]
 
+''' Remove duplicate detections from the joints (important for the WatchTV class) '''
+def filter_duplicates(joints, img_ids):
+	d = {}
+	for i in img_ids: d[i] = i in d
+	uniques = [k for k in d if not d[k]] # img_ids which only occur exactly once -> no double detections
+
+	new_joints = []
+	new_img_ids = []
+	for j, i in zip(joints, img_ids):
+		if i in uniques: # only single detection
+			new_joints.append(j)
+			new_img_ids.append(i)
+
+		elif i not in new_img_ids: # this id has not been added yet
+			joints_with_this_img_id = [joint for (joint, img) in zip(joints, img_ids) if img == i]
+			joint_centers_with_this_img_id = np.array([np.array([np.array(el) for el in trios(joint)]) for joint in joints_with_this_img_id])
+			areas = [(np.max(joint_center[:, 0]) - np.min(joint_center[:, 0])) * (np.max(joint_center[:, 1]) - np.min(joint_center[:, 1])) for joint_center in joint_centers_with_this_img_id]
+			index = np.argmax(np.array(areas))
+			new_joints.append(joints_with_this_img_id[index])
+			new_img_ids.append(i)
+
+
+		else: # this multiple detection is already taken care of
+			continue
+	return new_joints, new_img_ids
+
 ''' 
 	The method expects the root_dir to contain directories, e.g. Co_S1K1_fC6, which contain alphapose-results.json each 
     
@@ -120,6 +146,7 @@ def generate_heatmaps_and_limbs(H=640, W=368, scale=6, root_dir='/home/zrrr/skel
 		joints = [el['keypoints'] for el in data] 
 		img_ids = [el['image_id'] for el in data]
 		img_ids = [int(el.split('.')[0]) for el in img_ids] 
+		joints, img_ids = filter_duplicates(joints, img_ids) # Remove all duplicates -> Leave only detection with largest area
 
 
 		''' Check if we have enough detections to even consider the video in our dataset '''
@@ -170,7 +197,7 @@ def generate_heatmaps_and_limbs(H=640, W=368, scale=6, root_dir='/home/zrrr/skel
 			#cv2.imwrite(os.path.join(result_dir, 'limbs', os.path.basename(path), 'image_' + integer_to_filename(i + 1, length=5) +'.jpg'), limbs)
 		writer_heatmaps.release()
 		writer_limbs.release()
-		assert(img_counter==len(set(img_ids))) # Might have multiple detections in one frame
+		assert(img_counter==len(img_ids))
 	print('Done with', dropped_videos, 'dropped videos.')
 
 if __name__ == '__main__':

@@ -132,7 +132,7 @@ parser.add_argument('--aug_contrast_range', default=[0.0], type=float, nargs='+'
 
 parser.add_argument('--aug_crop_min_area', default=0.05, type=float)
 parser.add_argument('--aug_crop_max_area', default=1., type=float)
-parser.add_argument('--no_augmentation', action='store_true', default=False, type=bool,
+parser.add_argument('--no_augmentation', action='store_true', default=False,
                     help='Do not apply data augmentation to the training dataset.')
 
 
@@ -292,7 +292,7 @@ def prepare_augmentations(augmentation_settings, args):
         utils.augmentation.ToTensor(),
         utils.augmentation.Normalize()
         ])
-    if args.no_augmenation:
+    if args.no_augmentation:
         print("Not using any data augmentation for the heatmap/limbs/optical_fow modality")
         transform_train = transforms.Compose([
             utils.augmentation.Scale(size=args.img_dim),

@@ -28,7 +28,8 @@ class SimsDataset_Video(GenericActionDataset_Video):
                  random_state=42,
                  per_class_samples=None,
                  dataset_name="Sims Dataset",
-                 modality="heatmaps") -> None:
+                 modality="heatmaps",
+                 n_channels=3) -> None:
         super().__init__(dataset_root=dataset_root,
                          split_mode=split_mode,
                          vid_transform=vid_transform,
@@ -49,7 +50,8 @@ class SimsDataset_Video(GenericActionDataset_Video):
                          random_state=random_state,
                          per_class_samples=per_class_samples,
                          dataset_name=dataset_name,
-                         modality=modality)
+                         modality=modality,
+                         n_channels=n_channels)
 
         self.action_dict_encode = sims_simple_dataset_encoding
         self.action_dict_decode = sims_simple_dataset_decoding
@@ -78,7 +80,8 @@ if __name__ == "__main__":
     from torchvision import transforms
 
     trans = transforms.Compose([uaug.RandomSizedCrop(size=128, crop_area=(0.5, 0.5), consistent=True), uaug.ToTensor()])
-    genad = SimsDataset_Video(dataset_root="/cvhci/temp/zmarinov/joints_and_limbs/heatmaps", vid_transform=trans,
-                        split_mode="train")
+    genad = SimsDataset(dataset_root=os.path.expanduser("~/datasets/sims_dataset/frames"), vid_transform=trans,
+                        split_policy="files",
+                        split_mode="train", split_train_file="/home/david/datasets/sims_dataset/SimsSplitsCompleteVideos.csv")
     print(len(genad))
-    print(genad[0]['vclip'].shape)
+    print(genad[0])
