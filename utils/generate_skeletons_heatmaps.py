@@ -117,7 +117,7 @@ def filter_duplicates(joints, img_ids):
     
     	It generates images of the joint heatmaps and limbs and stores them in result_dir in the same directory names as the root_dir 
 '''
-def generate_heatmaps_and_limbs(H=640, W=368, scale=6, root_dir='/home/zrrr/skeleton_dirs/', result_dir='/home/zrrr/result_dataset', min_frac_detections=0.5):
+def generate_heatmaps_and_limbs(H=640, W=368, scale=6, root_dir=None, result_dir=None, min_frac_detections=0.5):
 	assert root_dir is not None
 	assert result_dir is not None
 

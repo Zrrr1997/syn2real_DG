@@ -9,10 +9,10 @@ from torch import nn
 
 
 class S3D(nn.Module):
-    def __init__(self, num_class):
+    def __init__(self, num_class, n_input_channels=3):
         super(S3D, self).__init__()
         self.base = nn.Sequential(
-            SepConv3d(3, 64, kernel_size=7, stride=2, padding=3),
+            SepConv3d(n_input_channels, 64, kernel_size=7, stride=2, padding=3),
             nn.MaxPool3d(kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1)),
             BasicConv3d(64, 64, kernel_size=1, stride=1),
             SepConv3d(64, 192, kernel_size=3, stride=1, padding=1),

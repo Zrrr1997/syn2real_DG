@@ -67,7 +67,7 @@ def train_video_stream(dl_train, model, optimizer, criterion,
 
         # Visualize images for tensorboard.
         if iteration == 0 or iteration == args.print_freq:
-            write_out_images(vid_seqs, writer_train, iteration)
+            write_out_images(vid_seqs, writer_train, iteration, args.n_channels, args.n_channels_first_modality, args.n_channels_second_modality, args.n_modalities)
 
         # Cuda Transfer
         s_cud_time = time.perf_counter()

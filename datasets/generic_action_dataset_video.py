@@ -82,12 +82,13 @@ class GenericActionDataset_Video(GenericActionDataset):
 
         if "vclip" in self.return_data:
             v_len = sample["frame_count"]
-            frame_indices = gad_v.idx_sampler(v_len, self.seq_len, sample["vid_path"], self.seq_shifts,
-                                            frame_range=(start_frame, end_frame))
-            frame_indices_vid = [idxs[::self.downsample_vid] for idxs in frame_indices]
+            random_first = np.random.randint(low=start_frame, high=end_frame - self.seq_len - 1)
+            frame_indices_vid = [np.arange(random_first, random_first + self.seq_len,  1)]
+
 
             # Read only [start_frame - end_frame] from video with cv2.VideoCapture
             seq_vid = gad_v.frame_loader(frame_indices_vid[0],  os.path.join(self.dataset_root, sample["vid_path"], self.modality + '.avi'), self.n_channels)
+
 
             t_seq = self.vid_transform(seq_vid)
 

@@ -4,6 +4,7 @@ Some code in this file is from https://github.com/TengdaHan/DPC
 
 import collections
 import math
+import cv2
 import numbers
 import random
 
@@ -21,46 +22,66 @@ class Padding:
     def __call__(self, img):
         return ImageOps.expand(img, border=self.pad, fill=0)
 
-
+''' Supports both PIL and numpy arrays '''
 class Scale:
-    def __init__(self, size, interpolation=Image.NEAREST):
+    def __init__(self, size, interpolation=Image.NEAREST, asnumpy=False):
         assert isinstance(size, int) or (isinstance(size, collections.Iterable) and len(size) == 2)
         self.size = size
         self.interpolation = interpolation
+        self.asnumpy = asnumpy
 
     def __call__(self, imgmap):
         # assert len(imgmap) > 1 # list of images
         img1 = imgmap[0]
         if isinstance(self.size, int):
-            w, h = img1.size
+            if self.asnumpy:
+               w, h = img1.shape[1], img1.shape[0]
+            else:
+               w, h = img1.size
             if (w <= h and w == self.size) or (h <= w and h == self.size):
                 return imgmap
             if w < h:
                 ow = self.size
                 oh = int(self.size * h / w)
-                return [i.resize((ow, oh), self.interpolation) for i in imgmap]
+                if self.asnumpy:
+                    return [cv2.resize(i, (ow, oh), cv2.INTER_NEAREST) for i in imgmap]
+                else:
+                    return [i.resize((ow, oh), self.interpolation) for i in imgmap]
             else:
                 oh = self.size
                 ow = int(self.size * w / h)
-                return [i.resize((ow, oh), self.interpolation) for i in imgmap]
+                if self.asnumpy:
+                    return [cv2.resize(i, (ow, oh), cv2.INTER_NEAREST) for i in imgmap]
+                else:
+                    return [i.resize((ow, oh), self.interpolation) for i in imgmap]
         else:
-            return [i.resize(self.size, self.interpolation) for i in imgmap]
+            if self.asnumpy:
+                return [cv2.resize(i, (self.size, self.size), cv2.INTER_NEAREST) for i in imgmap]
+            else:
+                return [i.resize(self.size, self.interpolation) for i in imgmap]
 
-
+''' Supports both PIL and numpy arrays '''
 class CenterCrop:
-    def __init__(self, size, consistent=True):
+    def __init__(self, size, consistent=True, asnumpy=False):
         if isinstance(size, numbers.Number):
             self.size = (int(size), int(size))
         else:
             self.size = size
+        self.asnumpy = asnumpy
 
     def __call__(self, imgmap):
         img1 = imgmap[0]
-        w, h = img1.size
+        if self.asnumpy:
+           w, h = img1.shape[1], img1.shape[0]
+        else:
+           w, h = img1.size
         th, tw = self.size
         x1 = int(round((w - tw) / 2.))
         y1 = int(round((h - th) / 2.))
-        return [i.crop((x1, y1, x1 + tw, y1 + th)) for i in imgmap]
+        if self.asnumpy:
+           return [i[y1:y1+th, x1:x1+tw] for i in imgmap]
+        else:
+           return [i.crop((x1, y1, x1 + tw, y1 + th)) for i in imgmap]
 
 
 class RandomCropWithProb:
@@ -146,19 +167,24 @@ class RandomCrop:
         else:
             return imgmap
 
-
+''' Supports both PIL and numpy arrays '''
 class RandomSizedCrop:
-    def __init__(self, size, crop_area=(0.5, 1), interpolation=Image.BILINEAR, consistent=True, p=1.0, force_inside=False):
+    def __init__(self, size, crop_area=(0.5, 1), interpolation=Image.BILINEAR, consistent=True, p=1.0, force_inside=False, asnumpy=False):
         self.size = size
         self.interpolation = interpolation
         self.consistent = consistent
         self.threshold = p
         self.crop_area = crop_area
         self.force_inside = force_inside
+        self.asnumpy = asnumpy
 
     def random_crop_box(self, img):
-        w = img.size[0]
-        h = img.size[1]
+        if self.asnumpy:
+            w = img.shape[1]
+            h = img.shape[0]
+        else:
+            w = img.size[0]
+            h = img.size[1]
 
         # x_c and y_c describe the crop area center as values between 0 and 1.
         # w_c and h_c describe the crop lengths as width and height values in pixel.
@@ -178,16 +204,21 @@ class RandomSizedCrop:
         if random.random() < self.threshold:  # do RandomSizedCrop
             if self.consistent:
                 c_box = self.random_crop_box(img1)
-
-                imgmap = [i.crop(c_box) for i in imgmap]
-                for i in imgmap: assert (i.size == (c_box[2] - c_box[0], c_box[3] - c_box[1]))
+                if self.asnumpy:
+                   imgmap = [i[c_box[1]:c_box[3], c_box[0]:c_box[2]] for i in imgmap]
+                   for i in imgmap: assert (i.shape[1] == c_box[2] - c_box[0] and i.shape[0] == c_box[3] - c_box[1])
+                else:
+                   imgmap = [i.crop(c_box) for i in imgmap]
+                   for i in imgmap: assert (i.size == (c_box[2] - c_box[0], c_box[3] - c_box[1]))
             else:
                 imgmap = [i.crop(self.random_crop_box(i)) for i in imgmap]
-
-            imgmap = [i.resize((self.size, self.size), self.interpolation) for i in imgmap]
+            if self.asnumpy:
+                imgmap = [cv2.resize(i, (self.size, self.size), cv2.INTER_NEAREST) for i in imgmap]
+            else:
+                imgmap = [i.resize((self.size, self.size), self.interpolation) for i in imgmap]
 
         else:  # don't do RandomSizedCrop, do CenterCrop
-            crop = CenterCrop(self.size)
+            crop = CenterCrop(self.size, asnumpy=self.asnumpy)
             return crop(imgmap)
 
         return imgmap
@@ -356,21 +387,36 @@ class ColorJitter(object):
         return format_string
 
 
+''' Supports both PIL and numpy arrays '''
 class RandomRotation:
-    def __init__(self, consistent=True, degree=15, p=1.0):
+    def __init__(self, consistent=True, degree=15, p=1.0, asnumpy=False):
         self.consistent = consistent
         self.degree_high = degree if isinstance(degree, numbers.Number) else degree[1]
         self.degree_low = -degree if isinstance(degree, numbers.Number) else degree[0]
         self.threshold = p
+        self.asnumpy = asnumpy
+
+    ''' Rotation method for numpy images '''
+    def rotate_image(self, image, angle):
+        image_center = tuple(np.array(image.shape[1::-1]) / 2)
+        rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
+        result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
+        return result
 
     def __call__(self, imgmap):
         if random.random() < self.threshold:  # do RandomRotation
             if self.consistent:
                 deg = np.random.randint(self.degree_low, self.degree_high, 1)[0]
-                return [i.rotate(deg, expand=True) for i in imgmap]
+                if self.asnumpy:
+                    return [self.rotate_image(i, deg) for i in imgmap]
+                else:
+                    return [i.rotate(deg, expand=True) for i in imgmap]
             else:
-                return [i.rotate(np.random.randint(self.degree_low, self.degree_high, 1)[0], expand=True) for i in
-                        imgmap]
+                if self.asnumpy:
+                    return [self.rotate_image(i, np.random.randint(self.degree_low, self.degree_high, 1)[0]) for i in imgmap]
+                else:
+                    return [i.rotate(np.random.randint(self.degree_low, self.degree_high, 1)[0], expand=True) for i in imgmap]
+
         else:  # don't do RandomRotation, do nothing
             return imgmap
 

@@ -12,6 +12,7 @@ import utils.augmentation
 from datasets.adl_dataset import ADLDataset
 from datasets.sims_dataset import SimsDataset
 from datasets.sims_dataset_video import SimsDataset_Video
+from datasets.sims_dataset_video_two_modalities import SimsDataset_Video_Two_Modalities
 from lib.C3D import C3D
 from lib.i3d_hassony import I3D, Unit3Dpy
 from lib.s3d import S3D
@@ -63,8 +64,13 @@ parser.add_argument('--seq_len', default=32, type=int, help='This is the base nu
 parser.add_argument('--ds_vid', default=1, type=int, help='Downsampling rate. (use every n-th frame).')
 
 parser.add_argument('--img_dim', default=128, type=int, help="The image dimension of the frames (will be squared).")
+parser.add_argument('--n_channels', default=3, type=int, help="The number of channels of the frames.")
+parser.add_argument('--n_channels_first_modality', default=1, type=int, help="The number of channels of the frames for the first modality.")
+parser.add_argument('--n_channels_second_modality', default=1, type=int, help="The number of channels of the frames for the second modality.")
 
-parser.add_argument('--modality', default="heatmaps", type=str, help="The modality on which to train on.")
+parser.add_argument('--n_modalities', default=1, type=int, help="The number of modalities on which to train on (or test).")
+parser.add_argument('--modality', default="heatmaps", type=str, help="The modality on which to train on (or test).")
+parser.add_argument('--second_modality', default="limbs", type=str, help="The second modality on which to train on (or test).")
 
 parser.add_argument('--model_vid', default="s3d", type=str, choices=["s3d", "s3dg", "i3d", "r2+1d", "r18"],
                     help="The model for the video backbone.")
@@ -77,6 +83,8 @@ parser.add_argument('--model_body', default="skelemotion", type=str, choices=["s
 
 parser.add_argument('--score_function', default='cross-entropy', choices=["cross-entropy"], type=str,
                     help="The loss function.")
+parser.add_argument('--asnumpy',  action = 'store_true', default=False,
+                    help="True if input images are numpy arrays instead of PIL images (needed for multimodal training with multiple channels, unsupported by PIL).")
 
 parser.add_argument('--training_focus', default='all', type=str, choices=["all", "last"],
                     help='This applies to fine-tuning. Whether to train the full model or only the last layers.')
@@ -120,6 +128,8 @@ parser.add_argument('--start_iteration', default=0, type=int, help='Explicit ite
 
 parser.add_argument('--dataset-video-root', default=os.path.expanduser("~/datasets/sims_dataset/frames"), type=str,
                     help="Root folder of the video frames for this dataset.")
+parser.add_argument('--second_modality_dataset', default=os.path.expanduser("~/datasets/sims_dataset/frames"), type=str,
+                    help="Root folder of the video frames for the second modality dataset.")
 parser.add_argument('--dataset-skele-motion-root', default=os.path.expanduser("~/datasets/sims_dataset/skele-motion"),
                     type=str, help="Root folder for the skelemotion data for this dataset.")
 
@@ -241,7 +251,7 @@ def step_schedule(lr, ep, args):
 def select_and_prepare_model(args):
     if args.model_vid == 's3d':
         print("Using the S3D model.")
-        model = S3D(num_class=args.num_classes)
+        model = S3D(num_class=args.num_classes, n_input_channels=args.n_channels)
         if args.pretrained_model_s3d:
             model.load_pretrained_unequal(args.pretrained_model_s3d)
     elif args.model_vid == "i3d":
@@ -281,7 +291,15 @@ def select_and_prepare_model(args):
 
 
 def prepare_augmentations(augmentation_settings, args):
+    normalization = utils.augmentation.Normalize()
+    if args.n_channels == 1 or args.n_modalities > 1:
+        print("Using numpy friendly normalization...")
+        normalization = utils.augmentation.Normalize((0.5,), (0.5,))
+    if args.n_modalities > 1:
+        args.asnumpy = True
 
+    # TODO
+    ''' No jitter for now (not_implemented for numpy arrays yet...
     transform_train = transforms.Compose([
         utils.augmentation.RandomRotation(degree=augmentation_settings["rot_range"]),
         utils.augmentation.RandomSizedCrop(size=args.img_dim, crop_area=augmentation_settings["crop_arr_range"],
@@ -290,22 +308,31 @@ def prepare_augmentations(augmentation_settings, args):
                                        saturation=augmentation_settings["sat_range"],
                                        hue=augmentation_settings["hue_range"]),
         utils.augmentation.ToTensor(),
-        utils.augmentation.Normalize()
+        normalization
+        ])
+    '''
+    # Same augmentation as before, but without ColorJitter. We need ColorJitter only for the RGB-based input!
+    transform_train = transforms.Compose([
+        utils.augmentation.RandomRotation(degree=augmentation_settings["rot_range"], asnumpy=args.asnumpy),
+        utils.augmentation.RandomSizedCrop(size=args.img_dim, crop_area=augmentation_settings["crop_arr_range"],
+                                           consistent=True, force_inside=True, asnumpy=args.asnumpy),
+        utils.augmentation.ToTensor(),
+        normalization
         ])
     if args.no_augmentation:
         print("Not using any data augmentation for the heatmap/limbs/optical_fow modality")
         transform_train = transforms.Compose([
-            utils.augmentation.Scale(size=args.img_dim),
-            utils.augmentation.CenterCrop(size=args.img_dim, consistent=True),
+            utils.augmentation.Scale(size=args.img_dim, asnumpy=args.asnumpy),
+            utils.augmentation.CenterCrop(size=args.img_dim, consistent=True, asnumpy=args.asnumpy),
             utils.augmentation.ToTensor(),
-            utils.augmentation.Normalize()
+            normalization
             ])
 
     transform_test = transforms.Compose([
-        utils.augmentation.Scale(size=args.img_dim),
-        utils.augmentation.CenterCrop(size=args.img_dim, consistent=True),
+        utils.augmentation.Scale(size=args.img_dim, asnumpy=args.asnumpy),
+        utils.augmentation.CenterCrop(size=args.img_dim, consistent=True, asnumpy=args.asnumpy),
         utils.augmentation.ToTensor(),
-        utils.augmentation.Normalize()
+        normalization
         ])
 
     return transform_train, transform_test
@@ -339,7 +366,7 @@ def get_data(vid_transform, mode='train', args=None, random_state=42):
                              per_class_samples=args.per_class_samples,
                              test_on_sims=args.test_on_sims,
                              random_state=random_state)
-    elif args.dataset == 'sims_video':
+    elif args.dataset == 'sims_video' and args.n_modalities == 1:
         dataset = SimsDataset_Video(dataset_root=args.dataset_video_root,
                              split_mode=mode,
                              split_train_file=args.train_split_file,
@@ -352,7 +379,27 @@ def get_data(vid_transform, mode='train', args=None, random_state=42):
                              use_cache=not args.no_cache,
                              per_class_samples=args.per_class_samples,
                              random_state=random_state,
-                             modality=args.modality)
+                             modality=args.modality,
+                             n_channels=args.n_channels)
+    elif args.dataset == 'sims_video' and args.n_modalities == 2:
+        dataset = SimsDataset_Video_Two_Modalities(dataset_root=args.dataset_video_root,
+                             split_mode=mode,
+                             split_train_file=args.train_split_file,
+                             vid_transform=vid_transform,
+                             seq_len=args.seq_len,
+                             seq_shifts=args.sampling_shift,
+                             downsample_vid=args.ds_vid,
+                             split_policy=args.split_policy,
+                             sample_limit=args.max_samples,
+                             use_cache=not args.no_cache,
+                             per_class_samples=args.per_class_samples,
+                             random_state=random_state,
+                             modality=args.modality,
+                             n_channels=args.n_channels,
+                             second_modality=args.second_modality,
+                             dataset_root_second_modality=args.second_modality_dataset,
+                             n_channels_first_modality=args.n_channels_first_modality,
+                             n_channels_second_modality=args.n_channels_second_modality)
     else:
         raise ValueError('dataset not supported')
 
@@ -374,7 +421,6 @@ def get_data(vid_transform, mode='train', args=None, random_state=42):
 
 def check_and_prepare_cuda(device_ids):
     # NVIDIA-SMI uses PCI_BUS_ID device order, but CUDA orders graphics devices by speed by default (fastest first).
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join([str(dev_id) for dev_id in device_ids])
 
     print('Cuda visible devices: {}'.format(os.environ["CUDA_VISIBLE_DEVICES"]))
