@@ -38,6 +38,8 @@ class GenericActionDataset_Video(GenericActionDataset):
 
         self.modality = modality
         self.n_channels=n_channels
+
+
         super().__init__(dataset_root=dataset_root,
                          split_mode=split_mode,
                          vid_transform=vid_transform,
@@ -156,14 +158,25 @@ class GenericActionDataset_Video(GenericActionDataset):
 
 
     @staticmethod
-    def frame_loader(frame_indices, path, n_channels):
+    def frame_loader(frame_indices, path, n_channels, modality=None, color_jitter=False, color_jitter_trans=None):
         assert len(frame_indices) != 0
         cap = cv2.VideoCapture(path)
+
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_indices[0])
         seq = []
         for i in range(len(frame_indices)):
             if n_channels == 3:
-               seq.append(Image.fromarray(cap.read()[1]))
+               if (not color_jitter) or modality != 'rgb': # special case for color jitter for rgb images
+                   res, frame = cap.read()
+                   if frame is None:
+                      print('None problem', path, frame_indices[0], i, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+                      seq.append(seq[-1])
+                      continue
+                   #seq.append(Image.fromarray(cap.read()[1]))
+                   seq.append(Image.fromarray(frame))
+               else:
+                   seq.append(color_jitter_trans(Image.fromarray(cap.read()[1])))
+               
             elif n_channels == 1:
                img = cap.read()[1]
                seq.append(Image.fromarray(img[:,:,0].reshape((img.shape[0], img.shape[1])), 'L'))

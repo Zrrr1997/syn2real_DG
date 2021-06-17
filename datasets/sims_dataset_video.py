@@ -52,7 +52,6 @@ class SimsDataset_Video(GenericActionDataset_Video):
                          dataset_name=dataset_name,
                          modality=modality,
                          n_channels=n_channels)
-
         self.action_dict_encode = sims_simple_dataset_encoding
         self.action_dict_decode = sims_simple_dataset_decoding
 

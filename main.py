@@ -83,7 +83,7 @@ parser.add_argument('--model_body', default="skelemotion", type=str, choices=["s
 
 parser.add_argument('--score_function', default='cross-entropy', choices=["cross-entropy"], type=str,
                     help="The loss function.")
-parser.add_argument('--asnumpy',  action = 'store_true', default=False,
+parser.add_argument('--asnumpy',  action='store_true', default=False,
                     help="True if input images are numpy arrays instead of PIL images (needed for multimodal training with multiple channels, unsupported by PIL).")
 
 parser.add_argument('--training_focus', default='all', type=str, choices=["all", "last"],
@@ -152,6 +152,10 @@ def argument_checks(args):
     """
     assert args.batch_size % len(args.gpu) == 0, "Batch size has to be divisible by GPU count."
     assert args.loader_workers >= 0
+    if args.n_modalities == 1:
+        assert args.n_channels == args.n_channels_first_modality 
+    if args.n_modalities == 2:
+        assert args.n_channels == args.n_channels_first_modality + args.n_channels_second_modality
 
     return args
 
@@ -221,16 +225,16 @@ def main():
     if not hasattr(args, 'best_val_acc'):
         args.best_val_acc = None
 
-    vid_transform, test_transform = prepare_augmentations(augmentation_settings, args)
+    vid_transform, test_transform, color_jitter_trans = prepare_augmentations(augmentation_settings, args)
 
     writer_train, writer_val = get_summary_writers(args.log_path, f"exp_{args.exp_num}_{args.exp_suffix}")
 
     write_settings_file(args, args.exp_path)
 
     if not args.test_only:
-        train_loader, train_len = get_data(vid_transform, 'train', args)
-        val_loader, val_len = get_data(vid_transform, 'val', args)
-    test_loader, test_len = get_data(test_transform, 'test', args)
+        train_loader, train_len = get_data(vid_transform, 'train', args, 42,  color_jitter_trans)
+        val_loader, val_len = get_data(vid_transform, 'val', args, 42, color_jitter_trans)
+    test_loader, test_len = get_data(test_transform, 'test', args, 42)
 
     if args.training_stream == "vid":
         if not args.test_only:
@@ -298,27 +302,29 @@ def prepare_augmentations(augmentation_settings, args):
     if args.n_modalities > 1:
         args.asnumpy = True
 
-    # TODO
-    ''' No jitter for now (not_implemented for numpy arrays yet...
-    transform_train = transforms.Compose([
-        utils.augmentation.RandomRotation(degree=augmentation_settings["rot_range"]),
-        utils.augmentation.RandomSizedCrop(size=args.img_dim, crop_area=augmentation_settings["crop_arr_range"],
-                                           consistent=True, force_inside=True),
-        utils.augmentation.ColorJitter(brightness=augmentation_settings["val_range"], contrast=0,
+    color_jitter_trans = utils.augmentation.ColorJitter(brightness=augmentation_settings["val_range"], contrast=0,
                                        saturation=augmentation_settings["sat_range"],
-                                       hue=augmentation_settings["hue_range"]),
-        utils.augmentation.ToTensor(),
-        normalization
-        ])
-    '''
-    # Same augmentation as before, but without ColorJitter. We need ColorJitter only for the RGB-based input!
-    transform_train = transforms.Compose([
-        utils.augmentation.RandomRotation(degree=augmentation_settings["rot_range"], asnumpy=args.asnumpy),
-        utils.augmentation.RandomSizedCrop(size=args.img_dim, crop_area=augmentation_settings["crop_arr_range"],
-                                           consistent=True, force_inside=True, asnumpy=args.asnumpy),
-        utils.augmentation.ToTensor(),
-        normalization
-        ])
+                                       hue=augmentation_settings["hue_range"])
+    if args.n_modalities == 1:
+        transform_train = transforms.Compose([
+            utils.augmentation.RandomRotation(degree=augmentation_settings["rot_range"]),
+            utils.augmentation.RandomSizedCrop(size=args.img_dim, crop_area=augmentation_settings["crop_arr_range"],
+                                               consistent=True, force_inside=True),
+            utils.augmentation.ColorJitter(brightness=augmentation_settings["val_range"], contrast=0,
+                                           saturation=augmentation_settings["sat_range"],
+                                           hue=augmentation_settings["hue_range"]),
+            utils.augmentation.ToTensor(),
+            normalization
+            ])
+    elif not args.no_augmentation:
+        # Same augmentation as before, but without ColorJitter. We need ColorJitter only for the RGB-based input, which is handles separately by the args.color_jitter argument.
+        transform_train = transforms.Compose([
+            utils.augmentation.RandomRotation(degree=augmentation_settings["rot_range"], asnumpy=args.asnumpy),
+            utils.augmentation.RandomSizedCrop(size=args.img_dim, crop_area=augmentation_settings["crop_arr_range"],
+                                               consistent=True, force_inside=True, asnumpy=args.asnumpy),
+            utils.augmentation.ToTensor(),
+            normalization
+            ])
     if args.no_augmentation:
         print("Not using any data augmentation for the heatmap/limbs/optical_fow modality")
         transform_train = transforms.Compose([
@@ -335,10 +341,10 @@ def prepare_augmentations(augmentation_settings, args):
         normalization
         ])
 
-    return transform_train, transform_test
+    return transform_train, transform_test, color_jitter_trans
 
 
-def get_data(vid_transform, mode='train', args=None, random_state=42):
+def get_data(vid_transform, mode='train', args=None, random_state=42, color_jitter_trans=None):
     if args.dataset == 'sims':
         dataset = SimsDataset(dataset_root=args.dataset_video_root,
                               split_mode=mode,
@@ -399,7 +405,9 @@ def get_data(vid_transform, mode='train', args=None, random_state=42):
                              second_modality=args.second_modality,
                              dataset_root_second_modality=args.second_modality_dataset,
                              n_channels_first_modality=args.n_channels_first_modality,
-                             n_channels_second_modality=args.n_channels_second_modality)
+                             n_channels_second_modality=args.n_channels_second_modality,
+                             color_jitter=(args.modality=='rgb' or args.second_modality=='rgb') and (not args.no_augmentation),
+                             color_jitter_trans=color_jitter_trans)
     else:
         raise ValueError('dataset not supported')
 

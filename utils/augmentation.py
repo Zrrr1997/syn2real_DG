@@ -197,7 +197,7 @@ class RandomSizedCrop:
         x_l = math.floor(min(max(0, x_c * w - w_c / 2), w))
         y_u = math.floor(min(max(0, y_c * h - h_c / 2), h))
 
-        return int(x_l), int(y_u), int(x_l + w_c), int(y_u + h_c)
+        return int(x_l), int(y_u), int(min((x_l + w_c), w)), int(min((y_u + h_c), h)) # Clamp values because cropping breaks the shape of the image otherwise!
 
     def __call__(self, imgmap):
         img1 = imgmap[0]
@@ -206,7 +206,10 @@ class RandomSizedCrop:
                 c_box = self.random_crop_box(img1)
                 if self.asnumpy:
                    imgmap = [i[c_box[1]:c_box[3], c_box[0]:c_box[2]] for i in imgmap]
-                   for i in imgmap: assert (i.shape[1] == c_box[2] - c_box[0] and i.shape[0] == c_box[3] - c_box[1])
+                   for index, i in enumerate(imgmap):
+                      if not (i.shape[1] == c_box[2] - c_box[0] and i.shape[0] == c_box[3] - c_box[1]):
+                         print('Cropping broke image dimensions:', (i.shape[1], '!=', c_box[2] - c_box[0], 'and',  i.shape[0], '!=', c_box[3] - c_box[1]))
+                      assert (i.shape[1] == c_box[2] - c_box[0] and i.shape[0] == c_box[3] - c_box[1])
                 else:
                    imgmap = [i.crop(c_box) for i in imgmap]
                    for i in imgmap: assert (i.size == (c_box[2] - c_box[0], c_box[3] - c_box[1]))

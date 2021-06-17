@@ -11,7 +11,7 @@ from datasets.sims_dataset_video import SimsDataset_Video
 from utils.action_encodings import sims_simple_dataset_encoding, sims_simple_dataset_decoding
 
 
-class SimsDataset_Video_Two_Modalities(SimsDataset_Video):
+class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
     def __init__(self,
                  dataset_root=None,
                  split_mode='train',
@@ -32,27 +32,26 @@ class SimsDataset_Video_Two_Modalities(SimsDataset_Video):
                  cache_folder="cache",
                  random_state=42,
                  per_class_samples=None,
-                 dataset_name="Sims Dataset Two Modalities",
-                 modality="heatmaps",
+                 dataset_name="Sims Dataset Multiple Modalities",
+                 modalities=None,
                  n_channels=3,
-                 second_modality="limbs",
-                 dataset_root_second_modality=None,
-                 n_channels_first_modality=1,
-                 n_channels_second_modality=1,
+                 dataset_roots=None,
+                 n_channels_each_modality=None,
                  color_jitter=False,
                  color_jitter_trans=None) -> None:
-        self.n_channels_first_modality = n_channels_first_modality
-        self.n_channels_second_modality = n_channels_second_modality
+        self.n_channels_each_modality = n_channels_each_modality
         self.color_jitter=color_jitter
         self.color_jitter_trans=color_jitter_trans
-        print("Using", self.n_channels_first_modality, "channels for first modality and", self.n_channels_second_modality, "channels for second modality!")
+
 
         assert not (self.color_jitter_trans is None and color_jitter)
-        assert self.n_channels_first_modality + self.n_channels_second_modality == n_channels
-        self.dataset_root_second_modality = dataset_root_second_modality
-        self.second_modality = second_modality
+        assert sum(self.n_channels_each_modality) == n_channels
+
+        self.modalities = modalities
+        self.dataset_roots = dataset_roots
         self.action_dict_encode = sims_simple_dataset_encoding
         self.action_dict_decode = sims_simple_dataset_decoding
+        print("Using", self.n_channels_each_modality, "channels for each modality:", self.modalities)
         super().__init__(dataset_root=dataset_root,
                          split_mode=split_mode,
                          vid_transform=vid_transform,
@@ -72,10 +71,9 @@ class SimsDataset_Video_Two_Modalities(SimsDataset_Video):
                          cache_folder=cache_folder,
                          random_state=random_state,
                          per_class_samples=per_class_samples,
-                         dataset_name=dataset_name,
-                         modality=modality,
-                         n_channels=n_channels)
-        if self.color_jitter and (self.modality=='rgb' or self.second_modality=='rgb'):
+                         dataset_name=dataset_name
+                         )
+        if self.color_jitter and ('rgb' in self.modalities):
            print("Using color jitter on the RGB modality!")
 
 
@@ -106,35 +104,40 @@ class SimsDataset_Video_Two_Modalities(SimsDataset_Video):
             frame_indices_vid = [np.arange(random_first, random_first + self.seq_len,  1)]
 
             # Read only [start_frame - end_frame] from video with cv2.VideoCapture
-            seq_vid_first_modality = gad_v.frame_loader(frame_indices_vid[0],  os.path.join(self.dataset_root, sample["vid_path_first_modality"], self.modality + '.avi'), self.n_channels_first_modality, self.modality, self.color_jitter, self.color_jitter_trans)
-            seq_vid_second_modality = gad_v.frame_loader(frame_indices_vid[0],  os.path.join(self.dataset_root_second_modality, sample["vid_path_second_modality"], self.second_modality + '.avi'), self.n_channels_second_modality, self.second_modality, self.color_jitter, self.color_jitter_trans)
+            seq_vid_all_modalities = []
+            for i in range(len(self.modalities)):
+                seq_vid_all_modalities.append(gad_v.frame_loader(frame_indices_vid[0],  os.path.join(self.dataset_roots[i], sample["vid_path_modality_"+str(i+1)], self.modalities[i] + '.avi'), self.n_channels_each_modality[i], self.modalities[i], self.color_jitter, self.color_jitter_trans))
+            #seq_vid_second_modality = gad_v.frame_loader(frame_indices_vid[0],  os.path.join(self.dataset_root_second_modality, sample["vid_path_second_modality"], self.second_modality + '.avi'), self.n_channels_second_modality, self.second_modality, self.color_jitter, self.color_jitter_trans)
 
 
             ''' Add another channel dimension for grayscale images to be able to concatenate with other inputs
                 
                 Transform PIL images to numpy arrays because PIL does not support multi-channel images, i.e. concatenation of modalities.
+            
+                Make sure all modalities are of the same resolution, otherwise concatenation is impossible 
             '''
-
-            ''' Make sure both modalities are of the same resolution, otherwise concatenation is impossible '''
-            different_shapes = np.array(seq_vid_first_modality[0]).shape[0:2] != np.array(seq_vid_second_modality[0]).shape[0:2]
-            second_shape_temp = np.array(seq_vid_second_modality[0]).shape[0:2]
+            different_shapes = False
+            for i in range(len(self.modalities) - 1):
+                if np.array(seq_vid_all_modalities[i][0]).shape[0:2] != np.array(seq_vid_all_modalities[i+1][0]).shape[0:2]:
+                    different_shapes = True
+            second_shape_temp = np.array(seq_vid_all_modalities[1][0]).shape[0:2]
             second_shape = (second_shape_temp[1], second_shape_temp[0])
-            if self.n_channels_first_modality == 1:
-                if different_shapes:
-                    seq_vid_first_modality = np.array([np.expand_dims(cv2.resize(np.array(el), second_shape, interpolation=cv2.INTER_AREA), axis=2) for el in seq_vid_first_modality])
-                else:
-                    seq_vid_first_modality = np.array([np.expand_dims(np.array(el), axis=2) for el in seq_vid_first_modality])
-            else:
-                if different_shapes:
-                    seq_vid_first_modality = np.array([cv2.resize(np.array(el), second_shape, interpolation=cv2.INTER_AREA) for el in seq_vid_first_modality])
-                else:
-                    seq_vid_first_modality = np.array([np.array(el) for el in seq_vid_first_modality])
 
-            if self.n_channels_second_modality == 1:
-                seq_vid_second_modality = np.array([np.expand_dims(np.array(el), axis=2) for el in seq_vid_second_modality])
-            else:
-                seq_vid_second_modality = np.array([np.array(el) for el in seq_vid_second_modality])
-            seq_vid = np.concatenate((seq_vid_first_modality, seq_vid_second_modality), axis=3)
+            for i in range(len(self.modalities)):
+                if self.n_channels_each_modality[i] == 1:
+                    if different_shapes:
+                        seq_vid_all_modalities[i] = np.array([np.expand_dims(cv2.resize(np.array(el), second_shape, interpolation=cv2.INTER_AREA), axis=2) for el in seq_vid_all_modalities[i]])
+                    else:
+                        seq_vid_all_modalities[i] = np.array([np.expand_dims(np.array(el), axis=2) for el in seq_vid_all_modalities[i]])
+                else:
+                    if different_shapes:
+                        seq_vid_all_modalities[i] = np.array([cv2.resize(np.array(el), second_shape, interpolation=cv2.INTER_AREA) for el in seq_vid_all_modalities[i]])
+                    else:
+                        seq_vid_all_modalities[i] = np.array([np.array(el) for el in seq_vid_all_modalities[i]])
+
+            seq_vid = np.concatenate((seq_vid_all_modalities[0], seq_vid_all_modalities[1]), axis=3)
+            for i in np.arange(2, len(self.modalities)):
+                seq_vid = np.concatenate((seq_vid, seq_vid_all_modalities[i]), axis=3)
 
             t_seq = self.vid_transform(seq_vid)
 
@@ -168,8 +171,10 @@ class SimsDataset_Video_Two_Modalities(SimsDataset_Video):
             video_info = pd.read_csv(os.path.join(cache_folder, vid_cache_name), index_col=False)
             print("Loaded video info from cache.")
         else:
-            print("Searching for video folders on the file system for first modality...", end="")
-            video_paths = self.index_video_paths(dataset_root)
+
+
+            print("Searching for video folders for modality", self.modalities[0], "...")
+            video_paths = self.index_video_paths(self.dataset_roots[0])
             print("\b\b\b finished.")
 
             video_ids = [os.path.split(p)[1] for p in video_paths]
@@ -179,46 +184,50 @@ class SimsDataset_Video_Two_Modalities(SimsDataset_Video):
 
             print("Determining frame count per video...")
             vinfo = {"vid_id":      video_ids,
-                     "vid_path_first_modality":    [os.path.relpath(p, dataset_root) for p in video_paths],
+                     "vid_path_modality_1":    [os.path.relpath(p, self.dataset_roots[0]) for p in video_paths],
                      "action":      actions,
-                     "frame_count_first_modality": list(tqdm(map(lambda p: SimsDataset_Video.count_frames_in_video(p, self.modality), video_paths)))}
+                     "frame_count": list(tqdm(map(lambda p: SimsDataset_Video.count_frames_in_video(p, self.modalities[0]), video_paths)))}
 
             video_info_first_modality = pd.DataFrame(vinfo)
+            for i in range(len(self.modalities)):
+                if i == 0:
+                   continue
+                
+# TODO finish this after eating :D
 
 
+                print("Searching for video folders for modality", self.modalities[i], "...")
+                video_paths = self.index_video_paths(self.dataset_roots[i])
+                print("\b\b\b finished.")
 
-            print("Searching for video folders on the file system for second modality...", end="")
-            video_paths = self.index_video_paths(self.dataset_root_second_modality)
-            print("\b\b\b finished.")
+                video_ids = [os.path.split(p)[1] for p in video_paths]
 
-            video_ids = [os.path.split(p)[1] for p in video_paths]
+                actions = [self.extract_info_from_path(p) for p in video_paths]
+                actions = [a[0] if a[1] is None else ".".join(a) for a in actions]
 
-            actions = [self.extract_info_from_path(p) for p in video_paths]
-            actions = [a[0] if a[1] is None else ".".join(a) for a in actions]
+                print("Determining frame count per video...")
+                vinfo = {"vid_id":      video_ids,
+                         "vid_path_modality_" + str(i + 1):    [os.path.relpath(p, self.dataset_roots[i]) for p in video_paths],
+                         "action":      actions,
+                         "frame_count_second_modality": list(tqdm(map(lambda p: SimsDataset_Video.count_frames_in_video(p, self.modalities[i]), video_paths)))}
 
-            print("Determining frame count per video...")
-            vinfo = {"vid_id":      video_ids,
-                     "vid_path_second_modality":    [os.path.relpath(p, self.dataset_root_second_modality) for p in video_paths],
-                     "action":      actions,
-                     "frame_count_second_modality": list(tqdm(map(lambda p: SimsDataset_Video.count_frames_in_video(p, self.second_modality), video_paths)))}
-
-            video_info_second_modality = pd.DataFrame(vinfo)
+                video_info_second_modality = pd.DataFrame(vinfo)
 
 
-            video_info = pd.merge(video_info_first_modality, video_info_second_modality, how='inner', on=['vid_id', 'action'])
+                video_info = pd.merge(video_info_first_modality, video_info_second_modality, how='inner', on=['vid_id', 'action'])
 
-            ''' Make sure both modalities are aligned, i.e. have the same number of frames per video ---> Tolerated as misalignments are ~6 frames, which is equivalent to 0.003s for 60s video'''
-            diff = video_info[['frame_count_first_modality']].values - video_info[['frame_count_second_modality']].values
-            print('Maximum frame misalignment offset:', np.max(diff), 'Number of misalignments:', np.sum(diff != 0))
-            print(video_info)
-            min_error = video_info[['frame_count_first_modality', 'frame_count_second_modality']].min(axis=1).values
-            video_info['frame_count_first_modality'] = min_error
-            assert np.all(video_info[['frame_count_first_modality']].values == video_info[['frame_count_second_modality']].values)
+                ''' Make sure both modalities are aligned, i.e. have the same number of frames per video ---> Tolerated as misalignments are ~6 frames, which is equivalent to 0.003s for 60s video'''
+                diff = video_info[['frame_count']].values - video_info[['frame_count_second_modality']].values
+                print('Maximum frame misalignment offset:', np.max(diff), 'Number of misalignments:', np.sum(diff != 0))
+                min_error = video_info[['frame_count', 'frame_count_second_modality']].min(axis=1).values
+                video_info['frame_count'] = min_error
+                assert np.all(video_info[['frame_count']].values == video_info[['frame_count_second_modality']].values)
 
-            columns = video_info.columns
-            new_columns = [el if el != 'frame_count_first_modality' else 'frame_count' for el in columns]
-            video_info.columns = new_columns
-            del video_info['frame_count_second_modality']
+                columns = video_info.columns
+                new_columns = [el if el != 'frame_count' else 'frame_count' for el in columns]
+                video_info.columns = new_columns
+                del video_info['frame_count_second_modality']
+                video_info_first_modality = video_info # Update video_info
 
             if cache_folder is not None:
                 if not os.path.exists(cache_folder):
@@ -246,7 +255,7 @@ if __name__ == "__main__":
     color_jitter_trans = transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1)
 
     trans = transforms.Compose([uaug.RandomSizedCrop(size=128, crop_area=(0.5, 0.5), consistent=True, asnumpy=True), uaug.ToTensor()])
-    genad = SimsDataset_Video_Two_Modalities(dataset_root="/cvhci/temp/zmarinov/rgb", use_cache=False, vid_transform=trans, dataset_root_second_modality="/cvhci/temp/zmarinov/fixed_optical_flow/optical_flow", modality="rgb", second_modality="optical_flow", n_channels=6, n_channels_first_modality=3, n_channels_second_modality=3, color_jitter=True, color_jitter_trans=color_jitter_trans)
+    genad = SimsDataset_Video_Multiple_Modalities(dataset_roots=["/cvhci/temp/zmarinov/rgb", "/cvhci/temp/zmarinov/fixed_joints_and_limbs/heatmaps", "/cvhci/temp/zmarinov/fixed_joints_and_limbs/limbs", "/cvhci/temp/zmarinov/fixed_optical_flow/optical_flow"], use_cache=False, vid_transform=trans, modalities=["rgb", "heatmaps", "limbs", "optical_flow"], n_channels=8, n_channels_each_modality=[3,1,1,3], color_jitter=True, color_jitter_trans=color_jitter_trans)
     print('Length of the dataset',len(genad))
-
-    print('Image size test', genad[0]['vclip'].shape)
+    for i in range(10):
+        print('Image size test', genad[i]['vclip'].shape)

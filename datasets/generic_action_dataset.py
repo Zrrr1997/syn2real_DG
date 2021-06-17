@@ -98,6 +98,7 @@ class GenericActionDataset(data.Dataset):
 
         self.video_info = self.video_info.drop(drop_idx, axis=0)
 
+
         self.video_info = self.prepare_split(self.video_info, random_state=random_state)
 
         print(f"Number of samples in split {self.split_mode}: {len(self.video_info)}")
@@ -375,12 +376,12 @@ class GenericActionDataset(data.Dataset):
     
     
     def prepare_chunks(self, video_info: pd.DataFrame, chunk_length):
+        print(video_info)
         video_info["chunk_count"] = (video_info["frame_count"] // chunk_length).apply(lambda v: max(v, 1))
         video_info["chunk_start_idx"] = 0
         video_info["chunk_start_idx"] = [0] + list(video_info["chunk_count"].cumsum().iloc[:-1])
 
         chunk_to_vid_idx = []
-
         for idx, row in video_info.iterrows():
             chunk_to_vid_idx.extend([idx] * row.chunk_count)
 

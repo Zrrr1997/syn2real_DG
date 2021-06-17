@@ -145,13 +145,18 @@ def generate_heatmaps_and_limbs(H=640, W=368, scale=6, root_dir=None, result_dir
 		data = json.load(f)
 		joints = [el['keypoints'] for el in data] 
 		img_ids = [el['image_id'] for el in data]
-		img_ids = [int(el.split('.')[0]) for el in img_ids] 
+
+		#img_ids = [int(el.split('.')[0]) for el in img_ids] # -> Depends on the convention of naming the images... TODO: Use a common convention for everything!
+		img_ids = [int(el.split('.')[0].split('_')[1]) for el in img_ids] 
+
 		joints, img_ids = filter_duplicates(joints, img_ids) # Remove all duplicates -> Leave only detection with largest area
 
 
 		''' Check if we have enough detections to even consider the video in our dataset '''
 		video = cv2.VideoCapture(os.path.join(root_dir, os.path.basename(path), 'AlphaPose_' + os.path.basename(path) + '.avi'))
 		n_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+		video.release()
+
 		if len(img_ids) / n_frames < min_frac_detections:
 			dropped_videos += 1
 			print("Skipping video", os.path.basename(path), "because it has too few detections:", round(100 * len(img_ids) / n_frames, 1), '% < ', str(100 * min_frac_detections), '%')
@@ -197,7 +202,16 @@ def generate_heatmaps_and_limbs(H=640, W=368, scale=6, root_dir=None, result_dir
 			#cv2.imwrite(os.path.join(result_dir, 'limbs', os.path.basename(path), 'image_' + integer_to_filename(i + 1, length=5) +'.jpg'), limbs)
 		writer_heatmaps.release()
 		writer_limbs.release()
-		assert(img_counter==len(img_ids))
+
+		heatmaps_cap = cv2.VideoCapture(os.path.join(result_dir, 'heatmaps', os.path.basename(path), 'heatmaps.avi'))
+		limbs_cap = cv2.VideoCapture(os.path.join(result_dir, 'limbs', os.path.basename(path), 'limbs.avi'))
+		n_heatmaps = int(heatmaps_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+		n_limbs = int(limbs_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+		heatmaps_cap.release()
+		limbs_cap.release()
+		if n_heatmaps != n_frames or n_limbs != n_frames:
+			print(n_heatmaps, n_limbs, 'frames written but they should be', n_frames)
+		assert(n_heatmaps == n_frames and n_limbs == n_frames)
 	print('Done with', dropped_videos, 'dropped videos.')
 
 if __name__ == '__main__':

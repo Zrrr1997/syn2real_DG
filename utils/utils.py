@@ -51,8 +51,10 @@ def write_out_images(img_seqs, writer, iteration, n_channels, n_channels_first_m
 
            writer.add_image(f'input_seq_{i}', de_norm_imgs, iteration)
            '''
-        else:
-           img_seq_hor = img_seq.transpose(0, 1).contiguous().view(-1, n_channels_first_modality, img_dim, img_dim)
+        else: # only one modality
+
+           img_seq_hor = img_seq.transpose(0, 1).contiguous().view(-1, n_channels, img_dim, img_dim)
+
            num_imgs = img_seq_hor.shape[0]
 
            img_grid = vutils.make_grid(img_seq_hor, nrow=num_imgs)
@@ -316,7 +318,7 @@ def balanced_acc(csv_path='results_test_sims_frac_s3d_32f.csv'):
 	plt.plot(np.ones(10) * mean_balanced_accs[0], 'r--', label = 'Mean balanced accuracy Top1: ' + str(round(mean_balanced_accs[0], 2)))
 	plt.plot(np.ones(10) * normal_acc1, 'g--', label = 'Normal accuracy Top1: ' + str(round(normal_acc1, 2)))
 	plt.xticks(range(10), actions, rotation=45)
-        plt.ylim(0.0, 1.0)
+	plt.ylim(0.0, 1.0)
 	plt.legend()
 	plt.tight_layout()
 	plt.savefig(csv_path[:-3] +'_balanced_accuracies_top1.svg')

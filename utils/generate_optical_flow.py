@@ -27,7 +27,7 @@ def integer_to_filename(num, length = 5):
     return (base + str(num))[-length:]
 
 ''' 
-	The method expects the root_dir to contain directories, e.g. Co_S1K1_fC6 etc.
+	The method expects the root_dir to contain directories, e.g. Cook/Co_S1K1_fC6, Drink/Dr_S1K1_fC8 etc. IMPORTANT: Last edit includes the classnames in the root_dir!
     
     	It generates images or a video of the optical flow and stores them in result_dir with the same directory names as the root_dir 
 '''
@@ -41,13 +41,14 @@ def generate_heatmaps_and_limbs(H=640, W=368, paths=None, root_dir=None, result_
 
 	print('Calculating optical flow...')
 	for path in tqdm(paths): 
-		video = cv2.VideoCapture(os.path.join(root_dir, os.path.basename(path), 'AlphaPose_' + os.path.basename(path) + '.avi'))
+		#video = cv2.VideoCapture(os.path.join(root_dir, os.path.basename(path), 'AlphaPose_' + os.path.basename(path) + '.avi'))
+		video = cv2.VideoCapture(path)
 		n_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
 
-		if not os.path.exists(os.path.join(result_dir, 'optical_flow', os.path.basename(path))):
-			os.mkdir(os.path.join(result_dir, 'optical_flow', os.path.basename(path)))
+		if not os.path.exists(os.path.join(result_dir, 'optical_flow', os.path.basename(path.split('.')[0]))):
+			os.mkdir(os.path.join(result_dir, 'optical_flow', os.path.basename(path.split('.')[0])))
 
-		writer_optical_flow = cv2.VideoWriter(os.path.join(result_dir, 'optical_flow', os.path.basename(path), 'optical_flow.avi'), cv2.VideoWriter_fourcc(*"MJPG"), 30,(W, H))
+		writer_optical_flow = cv2.VideoWriter(os.path.join(result_dir, 'optical_flow', os.path.basename(path.split('.')[0]), 'optical_flow.avi'), cv2.VideoWriter_fourcc(*"MJPG"), 30,(W, H))
 
 		ret, frame1 = video.read()
 		prvs = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
@@ -66,8 +67,7 @@ def generate_heatmaps_and_limbs(H=640, W=368, paths=None, root_dir=None, result_
 			hsv[...,0] = ang * 180 / np.pi / 2
 			hsv[...,2] = cv2.normalize(mag, None, 0, 255 , cv2.NORM_MINMAX)
 			bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-			#cv2.imshow('frame2', bgr)
-			#cv2.waitKey(1)
+
 			writer_optical_flow.write(bgr)
 			#cv2.imwrite(os.path.join(result_dir, 'optical_flow', os.path.basename(path), 'image_' + integer_to_filename(img_counter + 1, length=5) +'.jpg'), bgr)
 			prvs = next
@@ -78,7 +78,12 @@ def generate_heatmaps_and_limbs(H=640, W=368, paths=None, root_dir=None, result_
 
 if __name__ == '__main__':
 	args = parser.parse_args()
-	paths = [os.path.join(args.root_dir, el) for el in sorted(os.listdir(args.root_dir))]
+	class_paths = [os.path.join(args.root_dir, el) for el in sorted(os.listdir(args.root_dir))] # or only paths... (see last edit note)
+	paths = []
+	for c_p in class_paths:
+		basepaths = sorted(os.listdir(c_p))
+		paths += [os.path.join(c_p, b_p) for b_p in basepaths]
+
 
 	processes = []
 	size = len(paths) // args.n_workers
