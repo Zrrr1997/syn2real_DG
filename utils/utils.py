@@ -32,7 +32,7 @@ def write_out_images(img_seqs, writer, iteration, n_channels, n_channels_first_m
     for i, img_seq in enumerate(img_seqs):
         # C, Sqlen, H, W
         img_dim = img_seq.shape[-1]
-        if n_modalities == 2:
+        if n_modalities >= 2:
            img_seq_first = img_seq[0:n_channels_first_modality, :, :, :]
            img_seq_hor = img_seq_first.transpose(0, 1).contiguous().view(-1, n_channels_first_modality, img_dim, img_dim)
            num_imgs = img_seq_hor.shape[0]
@@ -276,7 +276,8 @@ def balanced_acc(csv_path='results_test_sims_frac_s3d_32f.csv'):
 	classes = sorted(df['label'].unique())
 	pred_columns = ['pred1', 'pred2', 'pred3', 'pred4', 'pred5']	
 	actions = list({val: key for key, val in sims_simple_dataset_encoding.items()}.values())
-	balanced_accs = []
+	e = np.zeros(3)
+	balanced_accs = [e, e, e, e, e, e, e, e, e, e]
 	acc_dict = {}
 
 	# Top-1, -3, -5 normal and balanced prediction accuracy
@@ -286,11 +287,11 @@ def balanced_acc(csv_path='results_test_sims_frac_s3d_32f.csv'):
 		balanced_acc1 = len(x[x_1]) / len(x)
 		balanced_acc3 = len(x[x_1 | x_2 | x_3]) / len(x)
 		balanced_acc5 = len(x[x_1 | x_2 | x_3 | x_4 | x_5]) / len(x) 
-		balanced_accs.append(np.array([balanced_acc1, balanced_acc3, balanced_acc5]))
+		balanced_accs[c] = np.array([balanced_acc1, balanced_acc3, balanced_acc5])
 	balanced_accs = np.array(balanced_accs)
 	
 	# Mean Balanced 1,3,5 accuracies
-	mean_balanced_accs = np.mean(balanced_accs, axis = 0)
+	mean_balanced_accs = np.sum(balanced_accs, axis = 0) / len(classes) # Might be that not all classes are inside the test set! (0 samples in some class)
 	[x_1, x_2, x_3, x_4, x_5] = [df['label'] == df[p] for p in pred_columns]
 	normal_acc1 = len(df[x_1]) / len(df)
 	normal_acc3 = len(df[x_1 | x_2 | x_3]) / len(df)
@@ -301,19 +302,18 @@ def balanced_acc(csv_path='results_test_sims_frac_s3d_32f.csv'):
 	print('Normal accuracy top1:', normal_acc1)
 
 	acc_dict['Action_Name'] = actions
-	acc_dict['Action_ID'] = range(len(actions))
-	acc_dict['Balanced_Accuracies Top1'] =  np.array(balanced_accs[:,0])
-	acc_dict['Balanced_Accuracies Top3'] =  np.array(balanced_accs[:,1])
-	acc_dict['Balanced_Accuracies Top5'] =  np.array(balanced_accs[:,2])
-	acc_dict['Mean_Balanced_Accuracy Top1'] = mean_balanced_accs[0]
-	acc_dict['Mean_Balanced_Accuracy Top3'] = mean_balanced_accs[1]
-	acc_dict['Mean_Balanced_Accuracy Top5'] = mean_balanced_accs[2]
-	acc_dict['Normal_Accuracy Top1'] = normal_acc1
-	acc_dict['Normal_Accuracy Top3'] = normal_acc3
-	acc_dict['Normal_Accuracy Top5'] = normal_acc5
+	#acc_dict['Action_ID'] = range(len(actions))
+	#acc_dict['Balanced_Accuracies Top1'] =  np.array(balanced_accs[:,0])
+	#acc_dict['Balanced_Accuracies Top3'] =  np.array(balanced_accs[:,1])
+	#acc_dict['Balanced_Accuracies Top5'] =  np.array(balanced_accs[:,2])
+	acc_dict['Mean_Balanced_Accuracy Top1'] = [mean_balanced_accs[0]] * len(actions)
+	acc_dict['Mean_Balanced_Accuracy Top3'] = [mean_balanced_accs[1]] * len(actions)
+	acc_dict['Mean_Balanced_Accuracy Top5'] = [mean_balanced_accs[2]] * len(actions)
+	acc_dict['Normal_Accuracy Top1'] = [normal_acc1] * len(actions)
+	acc_dict['Normal_Accuracy Top3'] = [normal_acc3] * len(actions)
+	acc_dict['Normal_Accuracy Top5'] = [normal_acc5] * len(actions)
 
 	acc_df = pd.DataFrame(acc_dict)
-
 	plt.bar(range(10), balanced_accs[:,0], label='Balanced Accuracies Top1')
 	plt.plot(np.ones(10) * mean_balanced_accs[0], 'r--', label = 'Mean balanced accuracy Top1: ' + str(round(mean_balanced_accs[0], 2)))
 	plt.plot(np.ones(10) * normal_acc1, 'g--', label = 'Normal accuracy Top1: ' + str(round(normal_acc1, 2)))

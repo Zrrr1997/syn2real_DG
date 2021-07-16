@@ -38,11 +38,16 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
                  dataset_roots=None,
                  n_channels_each_modality=None,
                  color_jitter=False,
-                 color_jitter_trans=None) -> None:
+                 color_jitter_trans=None,
+                 test_on_sims=False,
+                 fine_tune_late_fusion=False) -> None:
+        self.test_on_sims = test_on_sims
+        self.fine_tune_late_fusion=fine_tune_late_fusion
         self.n_channels_each_modality = n_channels_each_modality
         self.color_jitter=color_jitter
         self.color_jitter_trans=color_jitter_trans
-
+        if split_mode == 'test':
+           color_jitter = False
 
         assert not (self.color_jitter_trans is None and color_jitter)
         assert sum(self.n_channels_each_modality) == n_channels
@@ -120,8 +125,9 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
             for i in range(len(self.modalities) - 1):
                 if np.array(seq_vid_all_modalities[i][0]).shape[0:2] != np.array(seq_vid_all_modalities[i+1][0]).shape[0:2]:
                     different_shapes = True
-            second_shape_temp = np.array(seq_vid_all_modalities[1][0]).shape[0:2]
-            second_shape = (second_shape_temp[1], second_shape_temp[0])
+            if len(self.modalities) > 1:
+                second_shape_temp = np.array(seq_vid_all_modalities[1][0]).shape[0:2]
+                second_shape = (second_shape_temp[1], second_shape_temp[0])
 
             for i in range(len(self.modalities)):
                 if self.n_channels_each_modality[i] == 1:
@@ -135,7 +141,11 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
                     else:
                         seq_vid_all_modalities[i] = np.array([np.array(el) for el in seq_vid_all_modalities[i]])
 
-            seq_vid = np.concatenate((seq_vid_all_modalities[0], seq_vid_all_modalities[1]), axis=3)
+            if len(self.modalities) > 1:
+                seq_vid = np.concatenate((seq_vid_all_modalities[0], seq_vid_all_modalities[1]), axis=3)
+            else:
+                seq_vid = seq_vid_all_modalities[0]
+
             for i in np.arange(2, len(self.modalities)):
                 seq_vid = np.concatenate((seq_vid, seq_vid_all_modalities[i]), axis=3)
 
@@ -144,7 +154,10 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
             del seq_vid
             # (self.seq_len, C, H, W) -> (C, self.seq_len, H, W)
             ret_dict["vclip"] = torch.stack(t_seq, 0).transpose(0, 1)
-
+            if self.fine_tune_late_fusion:
+                  assert len(self.n_channels_each_modality) == 2 # Only implemented for two modalities for now
+                  #torch.stack([torch.stack(t_seq, 0).transpose(0, 1)[:self.n_channels_each_modality[0]], torch.stack(t_seq, 0).transpose(0, 1)[self.n_channels_each_modality[0]:]], 0, out=ret_dict["vclip"])
+                  ret_dict["vclip"] = torch.cat([torch.stack(t_seq, 0).transpose(0, 1)[:self.n_channels_each_modality[0]], torch.stack(t_seq, 0).transpose(0, 1)[self.n_channels_each_modality[0]:]], dim=0)
         if "skmotion" in self.return_data:
             raise NotImplementedError()
 
@@ -189,11 +202,11 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
                      "frame_count": list(tqdm(map(lambda p: SimsDataset_Video.count_frames_in_video(p, self.modalities[0]), video_paths)))}
 
             video_info_first_modality = pd.DataFrame(vinfo)
+            if not self.test_on_sims and len(self.modalities) == 1:
+                return video_info_first_modality
             for i in range(len(self.modalities)):
                 if i == 0:
                    continue
-                
-# TODO finish this after eating :D
 
 
                 print("Searching for video folders for modality", self.modalities[i], "...")
@@ -216,23 +229,39 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
 
                 video_info = pd.merge(video_info_first_modality, video_info_second_modality, how='inner', on=['vid_id', 'action'])
 
-                ''' Make sure both modalities are aligned, i.e. have the same number of frames per video ---> Tolerated as misalignments are ~6 frames, which is equivalent to 0.003s for 60s video'''
+                ''' Make sure both modalities are aligned, i.e. have the same number of frames per video ---> Tolerated misalignments are ~6 frames, which is equivalent to 0.003s for 60s video'''
                 diff = video_info[['frame_count']].values - video_info[['frame_count_second_modality']].values
-                print('Maximum frame misalignment offset:', np.max(diff), 'Number of misalignments:', np.sum(diff != 0))
-                min_error = video_info[['frame_count', 'frame_count_second_modality']].min(axis=1).values
-                video_info['frame_count'] = min_error
-                assert np.all(video_info[['frame_count']].values == video_info[['frame_count_second_modality']].values)
+                #print('Maximum frame misalignment offset:', np.max(np.abs(diff)), 'Number of misalignments:', np.sum(diff != 0))
+                smaller_frame_count = video_info[['frame_count', 'frame_count_second_modality']].min(axis=1).values
+                video_info['frame_count'] = smaller_frame_count
+                assert np.all(video_info[['frame_count']].values <= video_info[['frame_count_second_modality']].values)
 
                 columns = video_info.columns
                 new_columns = [el if el != 'frame_count' else 'frame_count' for el in columns]
                 video_info.columns = new_columns
                 del video_info['frame_count_second_modality']
                 video_info_first_modality = video_info # Update video_info
+        if self.test_on_sims:
+            # filter out training subjects from Toyota ADL
+            if len(self.modalities) == 1:
+                video_info = video_info_first_modality
+            drop_idx = []
+            train_ids = ['p03', 'p04', 'p06', 'p07', 'p09', 'p12', 'p13', 'p15', 'p17', 'p19', 'p25']
+            for idx, row in video_info.iterrows():
+                vid_id = row.vid_id
+                for train_id in train_ids:
+                    if train_id in vid_id:
+                        drop_idx.append(idx)
 
+            print(f"Dropped {len(drop_idx)} samples for testing \n" f"Remaining dataset size: {len(video_info) - len(drop_idx)}")
+
+            video_info = video_info.drop(drop_idx, axis=0)
             if cache_folder is not None:
                 if not os.path.exists(cache_folder):
                     os.makedirs(cache_folder)
                 video_info.to_csv(os.path.join(cache_folder, vid_cache_name))
+
+        
         return video_info
 
     def get_split_from_file(self, video_info: pd.DataFrame):
@@ -255,7 +284,7 @@ if __name__ == "__main__":
     color_jitter_trans = transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1)
 
     trans = transforms.Compose([uaug.RandomSizedCrop(size=128, crop_area=(0.5, 0.5), consistent=True, asnumpy=True), uaug.ToTensor()])
-    genad = SimsDataset_Video_Multiple_Modalities(dataset_roots=["/cvhci/temp/zmarinov/rgb", "/cvhci/temp/zmarinov/fixed_joints_and_limbs/heatmaps", "/cvhci/temp/zmarinov/fixed_joints_and_limbs/limbs", "/cvhci/temp/zmarinov/fixed_optical_flow/optical_flow"], use_cache=False, vid_transform=trans, modalities=["rgb", "heatmaps", "limbs", "optical_flow"], n_channels=8, n_channels_each_modality=[3,1,1,3], color_jitter=True, color_jitter_trans=color_jitter_trans)
+    genad = SimsDataset_Video_Multiple_Modalities(dataset_roots=["/cvhci/temp/zmarinov/fixed_joints_and_limbs/heatmaps","/cvhci/temp/zmarinov/fixed_optical_flow/optical_flow"], use_cache=False, vid_transform=trans, modalities=["heatmaps", "optical_flow"], n_channels=4, n_channels_each_modality=[1,3], color_jitter=True, color_jitter_trans=color_jitter_trans, test_on_sims=True, fine_tune_late_fusion=True)
     print('Length of the dataset',len(genad))
     for i in range(10):
         print('Image size test', genad[i]['vclip'].shape)

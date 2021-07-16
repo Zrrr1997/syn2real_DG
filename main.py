@@ -13,9 +13,11 @@ from datasets.adl_dataset import ADLDataset
 from datasets.sims_dataset import SimsDataset
 from datasets.sims_dataset_video import SimsDataset_Video
 from datasets.sims_dataset_video_two_modalities import SimsDataset_Video_Two_Modalities
+from datasets.sims_dataset_video_multiple_modalities import SimsDataset_Video_Multiple_Modalities
 from lib.C3D import C3D
 from lib.i3d_hassony import I3D, Unit3Dpy
 from lib.s3d import S3D
+from lib.late_fusion_s3d import late_fusion_S3D
 from testing.test_video_stream import test_video_stream as test_vs
 from training.train_video_stream import training_loop_video_stream as train_vs
 from utils.utils import copy_file_backup
@@ -42,7 +44,7 @@ parser.add_argument('--loader_workers', default=16, type=int,
 parser.add_argument('--epochs', default=200, type=int, help='number of total epochs to run.')
 parser.add_argument('--batch_size', default=28, type=int, help="Make batch size divisible by GPU count.")
 
-parser.add_argument('--dataset', default='sims', choices=["sims", "adl", "nturgbd", "sims_video"], type=str)
+parser.add_argument('--dataset', default='sims', choices=["sims", "adl", "nturgbd", "sims_video", "sims_video_multimodal"], type=str)
 parser.add_argument('--num_classes', default=10, type=int, help='Number of classes for the classification task.')
 
 parser.add_argument('--split-policy', default='frac',
@@ -63,19 +65,28 @@ parser.add_argument('--seq_len', default=32, type=int, help='This is the base nu
 
 parser.add_argument('--ds_vid', default=1, type=int, help='Downsampling rate. (use every n-th frame).')
 
+# Input dimensions
 parser.add_argument('--img_dim', default=128, type=int, help="The image dimension of the frames (will be squared).")
 parser.add_argument('--n_channels', default=3, type=int, help="The number of channels of the frames.")
 parser.add_argument('--n_channels_first_modality', default=1, type=int, help="The number of channels of the frames for the first modality.")
 parser.add_argument('--n_channels_second_modality', default=1, type=int, help="The number of channels of the frames for the second modality.")
 
+# Multiple modalities
 parser.add_argument('--n_modalities', default=1, type=int, help="The number of modalities on which to train on (or test).")
 parser.add_argument('--modality', default="heatmaps", type=str, help="The modality on which to train on (or test).")
 parser.add_argument('--second_modality', default="limbs", type=str, help="The second modality on which to train on (or test).")
+parser.add_argument('--modalities', default=['rgb'], type=str, nargs='+', help="The set of modalities on which to train on (or test).")
+parser.add_argument('--dataset_roots', default=['/cvhci/temp/zmarinov/rgb'], type=str, nargs='+', help="The set of dataset root folders on which to train on (or test).")
+parser.add_argument('--n_channels_each_modality', default=[3], type=int, nargs='+', help="Number of channels for each modality.")
+
 
 parser.add_argument('--model_vid', default="s3d", type=str, choices=["s3d", "s3dg", "i3d", "r2+1d", "r18"],
                     help="The model for the video backbone.")
 parser.add_argument('--pretrained_model_i3d', default=None, type=str, help="Pre-trained I3D model.")
 parser.add_argument('--pretrained_model_s3d', default=None, type=str, help="Pre-trained S3D model.")
+parser.add_argument('--first_pretrained_model', default=None, type=str, help="Pre-trained S3D model for the first modality for late fusion fine tuning.")
+parser.add_argument('--second_pretrained_model', default=None, type=str, help="Pre-trained S3D model for the second modality for late fusion fine tuning.")
+parser.add_argument('--pretrained_fusion_model', default=None, type=str, help="Pre-trained late fusion model")
 parser.add_argument('--pretrained_model_c3d', default=None, type=str, help="Pre-trained C3D model.")
 
 parser.add_argument('--model_body', default="skelemotion", type=str, choices=["skelemotion"],
@@ -85,6 +96,8 @@ parser.add_argument('--score_function', default='cross-entropy', choices=["cross
                     help="The loss function.")
 parser.add_argument('--asnumpy',  action='store_true', default=False,
                     help="True if input images are numpy arrays instead of PIL images (needed for multimodal training with multiple channels, unsupported by PIL).")
+parser.add_argument('--fine_tune_late_fusion',  action='store_true', default=False,
+                    help="True if you want to fine-tune two modality models only with the last classification layer.")
 
 parser.add_argument('--training_focus', default='all', type=str, choices=["all", "last"],
                     help='This applies to fine-tuning. Whether to train the full model or only the last layers.')
@@ -152,9 +165,9 @@ def argument_checks(args):
     """
     assert args.batch_size % len(args.gpu) == 0, "Batch size has to be divisible by GPU count."
     assert args.loader_workers >= 0
-    if args.n_modalities == 1:
+    if args.n_modalities == 1 and not args.dataset == 'sims_video_multimodal':
         assert args.n_channels == args.n_channels_first_modality 
-    if args.n_modalities == 2:
+    if args.n_modalities == 2 and not args.dataset == 'sims_video_multimodal':
         assert args.n_channels == args.n_channels_first_modality + args.n_channels_second_modality
 
     return args
@@ -253,6 +266,24 @@ def step_schedule(lr, ep, args):
 
 
 def select_and_prepare_model(args):
+    if args.fine_tune_late_fusion:
+        print("Fine tuning two pre-trained modality models for late fusion")
+        modelA = S3D(num_class=args.num_classes, n_input_channels=args.n_channels_each_modality[0])
+        modelB = S3D(num_class=args.num_classes, n_input_channels=args.n_channels_each_modality[1])
+        if not args.test_only:
+            assert args.first_pretrained_model and args.second_pretrained_model
+            modelA.load_pretrained_unequal(args.first_pretrained_model)
+            modelB.load_pretrained_unequal(args.second_pretrained_model)
+        
+        output_dims = 1024
+        modelA.fc = torch.nn.Sequential(torch.nn.Conv3d(1024, output_dims, kernel_size=1, stride=1, bias=True), )
+        modelB.fc = torch.nn.Sequential(torch.nn.Conv3d(1024, output_dims, kernel_size=1, stride=1, bias=True), )
+
+        model = late_fusion_S3D(args.num_classes, modelA, modelB, 2 * output_dims, args.n_channels_each_modality)
+        if args.test_only:
+            model.load_pretrained_unequal(args.pretrained_fusion_model)      
+        return model
+ 
     if args.model_vid == 's3d':
         print("Using the S3D model.")
         model = S3D(num_class=args.num_classes, n_input_channels=args.n_channels)
@@ -307,9 +338,9 @@ def prepare_augmentations(augmentation_settings, args):
                                        hue=augmentation_settings["hue_range"])
     if args.n_modalities == 1:
         transform_train = transforms.Compose([
-            utils.augmentation.RandomRotation(degree=augmentation_settings["rot_range"]),
+            utils.augmentation.RandomRotation(degree=augmentation_settings["rot_range"], asnumpy=args.asnumpy),
             utils.augmentation.RandomSizedCrop(size=args.img_dim, crop_area=augmentation_settings["crop_arr_range"],
-                                               consistent=True, force_inside=True),
+                                               consistent=True, force_inside=True, asnumpy=args.asnumpy),
             utils.augmentation.ColorJitter(brightness=augmentation_settings["val_range"], contrast=0,
                                            saturation=augmentation_settings["sat_range"],
                                            hue=augmentation_settings["hue_range"]),
@@ -325,8 +356,9 @@ def prepare_augmentations(augmentation_settings, args):
             utils.augmentation.ToTensor(),
             normalization
             ])
+
     if args.no_augmentation:
-        print("Not using any data augmentation for the heatmap/limbs/optical_fow modality")
+        print("Not using any data augmentation for the heatmap / limbs / optical_flow modality")
         transform_train = transforms.Compose([
             utils.augmentation.Scale(size=args.img_dim, asnumpy=args.asnumpy),
             utils.augmentation.CenterCrop(size=args.img_dim, consistent=True, asnumpy=args.asnumpy),
@@ -408,6 +440,27 @@ def get_data(vid_transform, mode='train', args=None, random_state=42, color_jitt
                              n_channels_second_modality=args.n_channels_second_modality,
                              color_jitter=(args.modality=='rgb' or args.second_modality=='rgb') and (not args.no_augmentation),
                              color_jitter_trans=color_jitter_trans)
+    elif args.dataset == 'sims_video_multimodal':
+        dataset = SimsDataset_Video_Multiple_Modalities(dataset_root=args.dataset_video_root,
+                             split_mode=mode,
+                             split_train_file=args.train_split_file,
+                             vid_transform=vid_transform,
+                             seq_len=args.seq_len,
+                             seq_shifts=args.sampling_shift,
+                             downsample_vid=args.ds_vid,
+                             split_policy=args.split_policy,
+                             sample_limit=args.max_samples,
+                             use_cache=not args.no_cache,
+                             per_class_samples=args.per_class_samples,
+                             random_state=random_state,
+                             n_channels=args.n_channels,
+                             color_jitter=(args.modality=='rgb' or args.second_modality=='rgb') and (not args.no_augmentation),
+                             color_jitter_trans=color_jitter_trans,
+                             modalities=args.modalities,
+                             dataset_roots=args.dataset_roots,
+                             n_channels_each_modality=args.n_channels_each_modality,
+                             test_on_sims=args.test_on_sims,
+                             fine_tune_late_fusion=args.fine_tune_late_fusion)
     else:
         raise ValueError('dataset not supported')
 
@@ -460,7 +513,9 @@ def check_and_prepare_parameters(model, args):
             if args.model_vid == "i3d":
                 if "conv3d_0c_1x1" not in name:
                     param.requires_grad = False
-
+        if args.fine_tune_late_fusion:
+            if "fc" not in name:
+                    param.requires_grad = False
         print(name, param.requires_grad)
     print('=================================\n')
 

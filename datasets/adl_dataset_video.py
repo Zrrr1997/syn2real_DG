@@ -3,10 +3,11 @@ import pandas as pd
 #from torch.utils.data.dataset import T_co
 
 from datasets.generic_action_dataset_video import GenericActionDataset_Video
-from utils.action_encodings import sims_simple_dataset_encoding, sims_simple_dataset_decoding
+from utils.action_encodings import adl_dataset_encoding, adl_dataset_decoding, sims_simple_dataset_encoding, sims_simple_dataset_decoding
+from utils.utils import toyota_to_sims_df
 
 
-class SimsDataset_Video(GenericActionDataset_Video):
+class ADLDataset_Video(GenericActionDataset_Video):
     def __init__(self,
                  dataset_root=None,
                  split_mode='train',
@@ -27,9 +28,12 @@ class SimsDataset_Video(GenericActionDataset_Video):
                  cache_folder="cache",
                  random_state=42,
                  per_class_samples=None,
-                 dataset_name="Sims Dataset",
+                 test_on_sims=False,
+                 dataset_name="ADL Dataset Video",
                  modality="heatmaps",
                  n_channels=3) -> None:
+        self.test_on_sims = test_on_sims
+
         super().__init__(dataset_root=dataset_root,
                          split_mode=split_mode,
                          vid_transform=vid_transform,
@@ -52,8 +56,13 @@ class SimsDataset_Video(GenericActionDataset_Video):
                          dataset_name=dataset_name,
                          modality=modality,
                          n_channels=n_channels)
-        self.action_dict_encode = sims_simple_dataset_encoding
-        self.action_dict_decode = sims_simple_dataset_decoding
+        self.action_dict_encode = adl_dataset_encoding
+        self.action_dict_decode = adl_dataset_decoding
+        if self.test_on_sims:
+            self.action_dict_encode = sims_simple_dataset_encoding
+            self.action_dict_decode = sims_simple_dataset_decoding
+
+
 
     def __getitem__(self, index): # -> T_co:
         return super().__getitem__(index)
@@ -79,7 +88,7 @@ if __name__ == "__main__":
     from torchvision import transforms
 
     trans = transforms.Compose([uaug.RandomSizedCrop(size=128, crop_area=(0.5, 0.5), consistent=True), uaug.ToTensor()])
-    genad = SimsDataset_Video(dataset_root=os.path.expanduser("/cvhci/temp/zmarinov/ADL_rgb/"), vid_transform=trans,
-                        split_mode="test", use_cache=False, n_channels=3, modality='rgb')
+    genad = SimsDataset_Video(dataset_root=os.path.expanduser("/cvhci/temp/zmarinov/joints_and_limbs/heatmaps"), vid_transform=trans,
+                        split_mode="train", use_cache=False, n_channels=1)
     print(len(genad))
     print(genad[0]['vclip'].shape)

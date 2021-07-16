@@ -84,7 +84,13 @@ class GenericActionDataset_Video(GenericActionDataset):
 
         if "vclip" in self.return_data:
             v_len = sample["frame_count"]
-            random_first = np.random.randint(low=start_frame, high=end_frame - self.seq_len - 1)
+            assert v_len >= self.seq_len
+            if v_len < end_frame:
+                 end_frame = v_len # clip end_frame if chunk is larger than whole video
+            if start_frame >= end_frame - self.seq_len - 1 or end_frame - self.seq_len - 1 <= 0:
+                 random_first = 0 # directly start with first frame if video is too small
+            else:
+                 random_first = np.random.randint(low=start_frame, high=end_frame - self.seq_len - 1)
             frame_indices_vid = [np.arange(random_first, random_first + self.seq_len,  1)]
 
 
@@ -151,7 +157,18 @@ class GenericActionDataset_Video(GenericActionDataset):
 
     @staticmethod
     def count_frames_in_video(path, modality):
-        video = cv2.VideoCapture(os.path.join(path, modality + '.avi'))
+        if not (os.path.exists(os.path.join(path, modality + '.avi')) or os.path.exists(os.path.join(path, modality + '.mp4'))):
+             print(os.path.join(path, modality + '.avi'), os.path.join(path, modality + '.mp4'), "does not exist")
+        assert os.path.exists(os.path.join(path, modality + '.avi')) or os.path.exists(os.path.join(path, modality + '.mp4'))
+        extension = None
+        if os.path.exists(os.path.join(path, modality + '.avi')):
+             extension = '.avi'
+        elif os.path.exists(os.path.join(path, modality + '.mp4')):
+             extension = '.mp4'
+        else:
+             print("Unsupported video extension...Supported options are [.avi, .mp4]")
+             exit()
+        video = cv2.VideoCapture(os.path.join(path, modality + extension))
         n_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
         video.release()
         return n_frames
@@ -160,9 +177,14 @@ class GenericActionDataset_Video(GenericActionDataset):
     @staticmethod
     def frame_loader(frame_indices, path, n_channels, modality=None, color_jitter=False, color_jitter_trans=None):
         assert len(frame_indices) != 0
+        if not os.path.exists(path):
+            path = path[:-3] + 'mp4' # Try with mp4 if avi is not there
+        assert os.path.exists(path)
+            
         cap = cv2.VideoCapture(path)
-
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_indices[0])
+        n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        latest_possible = n_frames - len(frame_indices) # Make sure to not sample OUTSIDE of the video
+        cap.set(cv2.CAP_PROP_POS_FRAMES, min(frame_indices[0], latest_possible))
         seq = []
         for i in range(len(frame_indices)):
             if n_channels == 3:
@@ -175,15 +197,25 @@ class GenericActionDataset_Video(GenericActionDataset):
                    #seq.append(Image.fromarray(cap.read()[1]))
                    seq.append(Image.fromarray(frame))
                else:
-                   seq.append(color_jitter_trans(Image.fromarray(cap.read()[1])))
+
+                   frame = Image.fromarray(cap.read()[1])
+                   print("READING PIL IMAGE", frame.size)
+                   seq.append(frame)
+                   
                
             elif n_channels == 1:
-               img = cap.read()[1]
+               ret, img = cap.read()
+               #img = cap.read()[1]
+               if img is None:
+                  print("NONE PROBLEM", i + frame_indices[0], int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+                  img = np.zeros((640, 480, 1))
                seq.append(Image.fromarray(img[:,:,0].reshape((img.shape[0], img.shape[1])), 'L'))
             else:
                raise NotImplementedError()
-
+         
         cap.release()
+        if n_channels == 3 and modality == 'rgb' and color_jitter: # Apply consistent color jitter to all rgb images in the sequence
+            seq = color_jitter_trans(seq)
         return seq
 
 
@@ -193,8 +225,8 @@ if __name__ == "__main__":
     from torchvision import transforms
 
     trans = transforms.Compose([uaug.RandomSizedCrop(size=128, crop_area=(0.5, 0.5), consistent=True), uaug.ToTensor()])
-    genad = GenericActionDataset(dataset_root=os.path.expanduser("~/datasets/sims_dataset/frames"),
+    genad = GenericActionDataset_Video(dataset_root="/cvhci/temp/zmarinov/fixed_joints_and_limbs/heatmaps",
                                  dataset_name="Sims Dataset",
-                                 vid_transform=trans)
+                                 vid_transform=trans, use_cache=False)
     print(len(genad))
     #print(genad[0])

@@ -66,13 +66,17 @@ def train_video_stream(dl_train, model, optimizer, criterion,
         tr_stats["time_data_loading"].update(time.perf_counter() - dl_time)
 
         # Visualize images for tensorboard.
-        if iteration == 0 or iteration == args.print_freq:
-            write_out_images(vid_seqs, writer_train, iteration, args.n_channels, args.n_channels_first_modality, args.n_channels_second_modality, args.n_modalities)
+        if iteration == 0 or iteration == args.print_freq and not args.fine_tune_late_fusion:
+            if args.dataset == 'sims_dataset_multimodal':
+                write_out_images(vid_seqs, writer_train, iteration, args.n_channels, args.n_channels_each_modality[0], args.n_channels_each_modality[1], args.n_modalities)
+            else:
+                write_out_images(vid_seqs, writer_train, iteration, args.n_channels, args.n_channels_first_modality, args.n_channels_second_modality, args.n_modalities)
 
         # Cuda Transfer
         s_cud_time = time.perf_counter()
 
         vid_seqs = vid_seqs.to(cuda_device)
+
         labels = labels.to(cuda_device)
 
         e_cud_time = time.perf_counter()
@@ -82,6 +86,7 @@ def train_video_stream(dl_train, model, optimizer, criterion,
         s_forw_time = time.perf_counter()
 
         scores = model(vid_seqs)
+
 
         e_forw_time = time.perf_counter()
         tr_stats["time_forward"].update(e_forw_time - s_forw_time)

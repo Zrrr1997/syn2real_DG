@@ -140,7 +140,9 @@ def generate_heatmaps_and_limbs(H=640, W=368, scale=6, root_dir=None, result_dir
 	for path in tqdm(paths): 
 
 
-
+		if not os.path.exists(os.path.join(path, 'alphapose-results.json')):
+			print("Skipping video without any detections!")
+			continue                      
 		f = open(os.path.join(path, 'alphapose-results.json'))
 		data = json.load(f)
 		joints = [el['keypoints'] for el in data] 

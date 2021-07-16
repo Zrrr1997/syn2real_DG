@@ -43,10 +43,11 @@ class SimsDataset_Video_Two_Modalities(SimsDataset_Video):
                  color_jitter_trans=None) -> None:
         self.n_channels_first_modality = n_channels_first_modality
         self.n_channels_second_modality = n_channels_second_modality
+        if split_mode == 'test':
+           color_jitter = False
         self.color_jitter=color_jitter
         self.color_jitter_trans=color_jitter_trans
         print("Using", self.n_channels_first_modality, "channels for first modality and", self.n_channels_second_modality, "channels for second modality!")
-
         assert not (self.color_jitter_trans is None and color_jitter)
         assert self.n_channels_first_modality + self.n_channels_second_modality == n_channels
         self.dataset_root_second_modality = dataset_root_second_modality
@@ -213,7 +214,7 @@ class SimsDataset_Video_Two_Modalities(SimsDataset_Video):
             print(video_info)
             min_error = video_info[['frame_count_first_modality', 'frame_count_second_modality']].min(axis=1).values
             video_info['frame_count_first_modality'] = min_error
-            assert np.all(video_info[['frame_count_first_modality']].values == video_info[['frame_count_second_modality']].values)
+            assert np.all(video_info[['frame_count_first_modality']].values <= video_info[['frame_count_second_modality']].values)
 
             columns = video_info.columns
             new_columns = [el if el != 'frame_count_first_modality' else 'frame_count' for el in columns]

@@ -6,7 +6,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--root_dir', default=None, type=str,
                     help='Root directory with directories for each class Cook, Drink etc. and only videos inside e.g. Cook/Co_W2_fC2.avi. Output file system will contain directories with each video and each video will be renamed as rgb.avi')
 parser.add_argument('--extension', default='.avi', type=str,
-                    help='Video format.')
+                    help='Video format. Example: .avi')
 args = parser.parse_args()
 root_dir = args.root_dir
 extension = args.extension
