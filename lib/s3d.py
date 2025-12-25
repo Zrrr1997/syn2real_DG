@@ -30,37 +30,68 @@ class S3D(nn.Module):
             Mixed_5c(),
             )
         self.fc = nn.Sequential(nn.Conv3d(1024, num_class, kernel_size=1, stride=1, bias=True), )
+        #self.final_fc_classifier = nn.Linear(400, 10, bias=True) # for kinetics
 
     def forward(self, x):
+
+
         y = self.base(x)
+
         y = F.avg_pool3d(y, (2, y.size(3), y.size(4)), stride=1)
+
         y = self.fc(y)
         y = y.view(y.size(0), y.size(1), y.size(2))
-        logits = torch.mean(y, 2)
+        logits = torch.mean(y, 2) 
+
+        #logits = self.final_fc_classifier(logits) # for kinetics
+
+
 
         return logits
+
+    def embed(self, x):
+        y = self.base(x)
+
+        y = F.avg_pool3d(y, (2, y.size(3), y.size(4)), stride=1)
+
+        y = torch.flatten(y, start_dim=1)
+
+        return y
 
     def load_pretrained_unequal(self, file):
         # load the weight file and copy the parameters
         if os.path.isfile(file):
             print('Loading pre-trrained weight file.')
-            weight_dict = torch.load(file)
+            weight_dict = torch.load(file, map_location='cuda:0')
             weight_dict = weight_dict["state_dict"] if type(weight_dict) == dict else weight_dict
             model_dict = self.state_dict()
+
             for name, param in weight_dict.items():
+
                 if 'module' in name:
                     name = '.'.join(name.split('.')[1:])
-                if name in model_dict:
-                    if param.size() == model_dict[name].size():
+                if 'fc' in name:
+                    print(name, param.size())
+
+                name = name.replace('vid_backbone.', '') # for kinetics
+
+                if name in model_dict or 'fc' in name:
+                    if 'final' in name:
+                        new_name = name.replace(".2.", ".")
+                        model_dict[new_name].copy_(param) # for kinetics
+                    elif param.size() == model_dict[name].size():
+
                         model_dict[name].copy_(param)
+                        #model_dict[name] = param
                     else:
                         print(
                             f' WARNING parameter size not equal. Skipping weight loading for: {name} '
                             f'File: {param.size()} Model: {model_dict[name].size()}')
                 else:
                     print(f' WARNING parameter from weight file not found in model. Skipping {name}')
-
+            #exit()
             print('Loaded pre-trained parameters from file.')
+
         else:
             raise ValueError(f"Weight file {file} does not exist.")
 

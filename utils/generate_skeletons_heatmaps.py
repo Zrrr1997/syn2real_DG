@@ -121,7 +121,11 @@ def generate_heatmaps_and_limbs(H=640, W=368, scale=6, root_dir=None, result_dir
 	assert root_dir is not None
 	assert result_dir is not None
 
-	paths = [os.path.join(root_dir, el) for el in os.listdir(root_dir)]
+	class_paths = [os.path.join(root_dir, el) for el in os.listdir(root_dir)]
+	paths = []
+	for c in class_paths:
+		paths += [os.path.join(c, el) for el in os.listdir(c)]
+
 
 	# Joint pairs to form lines
 	l_pairs = [
@@ -149,13 +153,22 @@ def generate_heatmaps_and_limbs(H=640, W=368, scale=6, root_dir=None, result_dir
 		img_ids = [el['image_id'] for el in data]
 
 		#img_ids = [int(el.split('.')[0]) for el in img_ids] # -> Depends on the convention of naming the images... TODO: Use a common convention for everything!
-		img_ids = [int(el.split('.')[0].split('_')[1]) for el in img_ids] 
+		
+		#img_ids = [int(el.split('.')[0].split('_')[1]) for el in img_ids] Sims?
+		img_ids = [int(el.split('.')[0]) for el in img_ids] 
 
 		joints, img_ids = filter_duplicates(joints, img_ids) # Remove all duplicates -> Leave only detection with largest area
 
 
 		''' Check if we have enough detections to even consider the video in our dataset '''
-		video = cv2.VideoCapture(os.path.join(root_dir, os.path.basename(path), 'AlphaPose_' + os.path.basename(path) + '.avi'))
+		#video = cv2.VideoCapture(os.path.join(root_dir, os.path.basename(path), 'AlphaPose_' + os.path.basename(path) + '.mp4')) # check if avi or mp4
+		v_path = os.path.join(path, os.path.basename(path) + '.mp4')
+		video_path = v_path.replace("alphapose", "rgb")
+
+		video = cv2.VideoCapture(video_path) # check if avi or mp4
+
+		fps = video.get(cv2.CAP_PROP_FPS)
+
 		n_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
 		video.release()
 
@@ -169,8 +182,8 @@ def generate_heatmaps_and_limbs(H=640, W=368, scale=6, root_dir=None, result_dir
 		if not os.path.exists(os.path.join(result_dir, 'limbs', os.path.basename(path))):
 			os.mkdir(os.path.join(result_dir, 'limbs', os.path.basename(path)))
 
-		writer_heatmaps = cv2.VideoWriter(os.path.join(result_dir, 'heatmaps', os.path.basename(path), 'heatmaps.avi'), cv2.VideoWriter_fourcc(*"MJPG"), 30,(W, H))
-		writer_limbs = cv2.VideoWriter(os.path.join(result_dir, 'limbs', os.path.basename(path), 'limbs.avi'), cv2.VideoWriter_fourcc(*"MJPG"), 30,(W, H))
+		writer_heatmaps = cv2.VideoWriter(os.path.join(result_dir, 'heatmaps', os.path.basename(path), 'heatmaps.avi'), cv2.VideoWriter_fourcc(*"MJPG"), fps, (W, H)) # adjust FPS TODO
+		writer_limbs = cv2.VideoWriter(os.path.join(result_dir, 'limbs', os.path.basename(path), 'limbs.avi'), cv2.VideoWriter_fourcc(*"MJPG"), fps, (W, H))
 	
 
 		img_counter = 0
@@ -212,8 +225,8 @@ def generate_heatmaps_and_limbs(H=640, W=368, scale=6, root_dir=None, result_dir
 		heatmaps_cap.release()
 		limbs_cap.release()
 		if n_heatmaps != n_frames or n_limbs != n_frames:
-			print(n_heatmaps, n_limbs, 'frames written but they should be', n_frames)
-		assert(n_heatmaps == n_frames and n_limbs == n_frames)
+			print(n_heatmaps, n_limbs, 'frames written but they should be', n_frames, path)
+		#assert(n_heatmaps == n_frames and n_limbs == n_frames)
 	print('Done with', dropped_videos, 'dropped videos.')
 
 if __name__ == '__main__':

@@ -11,23 +11,14 @@ from utils.utils import AverageMeter, calc_topk_accuracy, ConfusionMeter, write_
 
 
 def test_video_stream(data_loader, model, criterion, epoch, cuda_device, args):
-    if args.G_path is not None:
-        G = Generator(c_dim = 2 * 4).to(cuda_device) # c_dim = K_n + K_s = 2 * K_s
+    G = Generator(c_dim = 2 * 4).to(cuda_device) # c_dim = K_n + K_s = 2 * K_s
 
-        print("------------------------------")
-        print('\n\n\n')
-        print("Testing with Domain Generator!")
-        print('\n\n\n')
-        print("------------------------------")
+    for name, param in G.named_parameters():
+        param.requires_grad = False
+    G.load_state_dict(torch.load(args.G_path, map_location='cuda:0'))
 
 
-        for name, param in G.named_parameters():
-            param.requires_grad = False
-        G.load_state_dict(torch.load(args.G_path, map_location='cuda:0'))
-
-
-        g_optimizer = torch.optim.Adam(G.parameters(), 0.001, (0.5, 0.999))
-
+    g_optimizer = torch.optim.Adam(G.parameters(), 0.001, (0.5, 0.999))
     test_stats = {"time_data_loading":  AverageMeter(locality=args.print_freq),
                   "time_cuda_transfer": AverageMeter(locality=args.print_freq),
                   "time_forward":       AverageMeter(locality=args.print_freq),
@@ -68,8 +59,8 @@ def test_video_stream(data_loader, model, criterion, epoch, cuda_device, args):
                 res_dict["vid_id"].extend(vid_ids)
                 res_dict["label"].extend(list(labels.numpy()))
 
-            if args.G_path is not None:
-                vid_seqs = transform_to_novel_batch(vid_seqs, G, args, cuda_device)
+
+            vid_seqs = transform_to_novel_batch(vid_seqs, G, args, cuda_device)
             if "chunk" in out.keys():
                 chunks = out["chunk"]
                 res_dict["chunk"].extend(list(chunks.numpy()))
@@ -225,7 +216,7 @@ def transform_to_novel_batch(x_all_batch, G, args, generator_device):
                     #fakes = torch.cat((fakes, x_fake[:,0,:,:].unsqueeze(1)), 1) # Concatenate generated domains along channel dimension
                     fakes = torch.cat((fakes, torch.mean(x_fake, dim=1, keepdim=True)), 1) # Concatenate generated domains along channel dimension
                 else:
-                    if index == modality_indices[0]:
+                    if index == args.modality_indices[0]:
                         full_fakes = x_fake
                         fakes = x_fake
                     else:

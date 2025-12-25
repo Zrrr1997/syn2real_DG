@@ -22,7 +22,7 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
                  max_samples=None,
                  split_policy="frac",
                  split_val_frac=0.1,
-                 split_test_frac=0.1,
+                 split_test_frac=1.0,
                  split_train_file=None,
                  split_val_file=None,
                  split_test_file=None,
@@ -40,12 +40,17 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
                  color_jitter=False,
                  color_jitter_trans=None,
                  test_on_sims=False,
-                 fine_tune_late_fusion=False) -> None:
+                 fine_tune_late_fusion=False,
+                 zeroed_modality=None) -> None:
         self.test_on_sims = test_on_sims
         self.fine_tune_late_fusion=fine_tune_late_fusion
         self.n_channels_each_modality = n_channels_each_modality
         self.color_jitter=color_jitter
         self.color_jitter_trans=color_jitter_trans
+        self.split_test_frac=split_test_frac
+        self.zeroed_modality = zeroed_modality
+
+
         if split_mode == 'test':
            color_jitter = False
 
@@ -141,6 +146,8 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
                     else:
                         seq_vid_all_modalities[i] = np.array([np.array(el) for el in seq_vid_all_modalities[i]])
 
+            if self.zeroed_modality is not None:
+                seq_vid_all_modalities[self.zeroed_modality] *= 0 
             if len(self.modalities) > 1:
                 seq_vid = np.concatenate((seq_vid_all_modalities[0], seq_vid_all_modalities[1]), axis=3)
             else:
@@ -182,7 +189,11 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
         vid_cache_name = f"video_info_cache_{dataset_name.replace(' ', '-')}.csv"
         if use_cache and os.path.exists(os.path.join(cache_folder, vid_cache_name)):
             video_info = pd.read_csv(os.path.join(cache_folder, vid_cache_name), index_col=False)
+            #for i in range(len(self.modalities)):
+            #      video_info['vid_path_modality_' + str(i+1)] = video_info['vid_path']
+            print("Loading cache from...", os.path.join(cache_folder, vid_cache_name))
             print("Loaded video info from cache.")
+            #return video_info
         else:
 
 
@@ -203,6 +214,11 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
 
             video_info_first_modality = pd.DataFrame(vinfo)
             if not self.test_on_sims and len(self.modalities) == 1:
+                for i in range(2, 5):
+                    video_info_first_modality['vid_path_modality_' + str(i)] = video_info_first_modality['vid_path_modality_1']
+                video_info_first_modality.to_csv(os.path.join(cache_folder, vid_cache_name))
+                print("SAVED TO CACHE")
+                print(vid_cache_name)
                 return video_info_first_modality
             for i in range(len(self.modalities)):
                 if i == 0:
@@ -241,9 +257,16 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
                 video_info.columns = new_columns
                 del video_info['frame_count_second_modality']
                 video_info_first_modality = video_info # Update video_info
-        if self.test_on_sims:
+        if self.test_on_sims or 'ADL' in self.dataset_roots[0]:
             # filter out training subjects from Toyota ADL
-            if len(self.modalities) == 1:
+            if len(self.modalities) == 1 and not use_cache:
+                for i in range(2, 5):
+                    video_info_first_modality['vid_path_modality_' + str(i)] = video_info_first_modality['vid_path_modality_1']
+                video_info_first_modality['vid_path_first_modality'] = video_info_first_modality['vid_path_modality_1'] # legacy code for YOLO
+                video_info_first_modality.to_csv(os.path.join(cache_folder, vid_cache_name))
+                print("SAVED TO CACHE")
+                print(vid_cache_name)
+                
                 video_info = video_info_first_modality
             drop_idx = []
             train_ids = ['p03', 'p04', 'p06', 'p07', 'p09', 'p12', 'p13', 'p15', 'p17', 'p19', 'p25']
@@ -252,6 +275,16 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
                 for train_id in train_ids:
                     if train_id in vid_id:
                         drop_idx.append(idx)
+            print("=============================================================")
+            print("Filtered the subjects ", self.split_mode, self.split_test_frac)
+            print("=============================================================")
+
+            '''
+            for idx, row in video_info.iterrows():
+                vid_id = row.vid_id
+                if not os.path.exists(os.path.join('/cvhci/temp/zmarinov/YOLO/yolov3/runs/ADL_done', row.vid_path_modality_1, 'detections.csv')):
+                        drop_idx.append(idx)
+            '''
 
             print(f"Dropped {len(drop_idx)} samples for testing \n" f"Remaining dataset size: {len(video_info) - len(drop_idx)}")
 
@@ -259,7 +292,8 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
             if cache_folder is not None:
                 if not os.path.exists(cache_folder):
                     os.makedirs(cache_folder)
-                video_info.to_csv(os.path.join(cache_folder, vid_cache_name))
+
+
 
         
         return video_info

@@ -40,6 +40,7 @@ class GenericActionDataset_Video(GenericActionDataset):
         self.n_channels=n_channels
 
 
+
         super().__init__(dataset_root=dataset_root,
                          split_mode=split_mode,
                          vid_transform=vid_transform,
@@ -179,8 +180,10 @@ class GenericActionDataset_Video(GenericActionDataset):
         assert len(frame_indices) != 0
         if not os.path.exists(path):
             path = path[:-3] + 'mp4' # Try with mp4 if avi is not there
+        if not os.path.exists(path):
+            print("Path does not exist:", path)
         assert os.path.exists(path)
-            
+        
         cap = cv2.VideoCapture(path)
         n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         latest_possible = n_frames - len(frame_indices) # Make sure to not sample OUTSIDE of the video
@@ -190,16 +193,16 @@ class GenericActionDataset_Video(GenericActionDataset):
             if n_channels == 3:
                if (not color_jitter) or modality != 'rgb': # special case for color jitter for rgb images
                    res, frame = cap.read()
+
                    if frame is None:
                       print('None problem', path, frame_indices[0], i, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
                       seq.append(seq[-1])
                       continue
-                   #seq.append(Image.fromarray(cap.read()[1]))
+
                    seq.append(Image.fromarray(frame))
-               else:
+               else: # Reading rgb image which will be augmented with color jitter
 
                    frame = Image.fromarray(cap.read()[1])
-                   print("READING PIL IMAGE", frame.size)
                    seq.append(frame)
                    
                
@@ -221,12 +224,14 @@ class GenericActionDataset_Video(GenericActionDataset):
 
 
 if __name__ == "__main__":
+    import os
     import utils.augmentation as uaug
     from torchvision import transforms
 
+    # Example usage - set DATASET_ROOT environment variable or modify path
+    dataset_root = os.environ.get("DATASET_ROOT", "/path/to/heatmaps")
     trans = transforms.Compose([uaug.RandomSizedCrop(size=128, crop_area=(0.5, 0.5), consistent=True), uaug.ToTensor()])
-    genad = GenericActionDataset_Video(dataset_root="/cvhci/temp/zmarinov/fixed_joints_and_limbs/heatmaps",
+    genad = GenericActionDataset_Video(dataset_root=dataset_root,
                                  dataset_name="Sims Dataset",
                                  vid_transform=trans, use_cache=False)
     print(len(genad))
-    #print(genad[0])

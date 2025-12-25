@@ -282,7 +282,8 @@ def balanced_acc(csv_path='results_test_sims_frac_s3d_32f.csv'):
 
 	# Top-1, -3, -5 normal and balanced prediction accuracy
 	for c in classes:
-		x = df[df['label'] == c] 
+		x = df[df['label'] == c]
+		print("Num predictions for class", c, " is ", len(x)) 
 		x_1, x_2, x_3, x_4, x_5 = [x[p] == c for p in pred_columns]
 		balanced_acc1 = len(x[x_1]) / len(x)
 		balanced_acc3 = len(x[x_1 | x_2 | x_3]) / len(x)
@@ -291,7 +292,8 @@ def balanced_acc(csv_path='results_test_sims_frac_s3d_32f.csv'):
 	balanced_accs = np.array(balanced_accs)
 	
 	# Mean Balanced 1,3,5 accuracies
-	mean_balanced_accs = np.sum(balanced_accs, axis = 0) / len(classes) # Might be that not all classes are inside the test set! (0 samples in some class)
+	print("NUM OF CLASSES EVALUTED:", len(classes))
+	mean_balanced_accs = np.sum(balanced_accs, axis = 0) / (len(classes)) # TODO: Might be that not all classes are inside the test set! (0 samples in some class e.g. ETRI)
 	[x_1, x_2, x_3, x_4, x_5] = [df['label'] == df[p] for p in pred_columns]
 	normal_acc1 = len(df[x_1]) / len(df)
 	normal_acc3 = len(df[x_1 | x_2 | x_3]) / len(df)

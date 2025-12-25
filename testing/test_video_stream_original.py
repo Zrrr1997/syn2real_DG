@@ -5,29 +5,11 @@ import numpy as np
 import pandas as pd
 import torch
 from tqdm import tqdm
-from testing.generator import Generator
 
 from utils.utils import AverageMeter, calc_topk_accuracy, ConfusionMeter, write_log, balanced_acc
 
 
 def test_video_stream(data_loader, model, criterion, epoch, cuda_device, args):
-    if args.G_path is not None:
-        G = Generator(c_dim = 2 * 4).to(cuda_device) # c_dim = K_n + K_s = 2 * K_s
-
-        print("------------------------------")
-        print('\n\n\n')
-        print("Testing with Domain Generator!")
-        print('\n\n\n')
-        print("------------------------------")
-
-
-        for name, param in G.named_parameters():
-            param.requires_grad = False
-        G.load_state_dict(torch.load(args.G_path, map_location='cuda:0'))
-
-
-        g_optimizer = torch.optim.Adam(G.parameters(), 0.001, (0.5, 0.999))
-
     test_stats = {"time_data_loading":  AverageMeter(locality=args.print_freq),
                   "time_cuda_transfer": AverageMeter(locality=args.print_freq),
                   "time_forward":       AverageMeter(locality=args.print_freq),
@@ -68,8 +50,8 @@ def test_video_stream(data_loader, model, criterion, epoch, cuda_device, args):
                 res_dict["vid_id"].extend(vid_ids)
                 res_dict["label"].extend(list(labels.numpy()))
 
-            if args.G_path is not None:
-                vid_seqs = transform_to_novel_batch(vid_seqs, G, args, cuda_device)
+
+
             if "chunk" in out.keys():
                 chunks = out["chunk"]
                 res_dict["chunk"].extend(list(chunks.numpy()))
@@ -170,74 +152,5 @@ def test_video_stream(data_loader, model, criterion, epoch, cuda_device, args):
         print("Done.")
 
     return None
-def transform_to_novel_batch(x_all_batch, G, args, generator_device):
-        G.train() 
-
-        modality_indices = []
-        modalities = ['heatmaps', 'limbs', 'optical_flow', 'rgb']
-        num_domains = len(modalities)
-        num_aug_domains = num_domains
-        data = []
-        curr = 0
-
-        with torch.no_grad():
-            x_all_batch = x_all_batch.transpose(1, 2) # switch Sequence and Channel dimension to combine sequence and batch dim
-
-            x_all_batch = x_all_batch.contiguous().view(-1, *x_all_batch.shape[2:]).transpose(0, 1) # (batch_size, 8, 16, 112, 122) -> (8, 16*batch_size, 112, 112)
-            for i, c in enumerate(args.n_channels_each_modality):
-                mod = x_all_batch[curr:curr+c].transpose(0, 1)
-                if c == 1:
-                    mod = torch.cat((mod, mod, mod), 1)
-                curr+=c
-                data.append(mod)
-            for i in range(4):
-                if modalities[i] in args.modalities:
-                    modality_indices.append(i)
-
-
-
-        
-            for i, index in enumerate(modality_indices): # go over all source domains
-
-                x_real = data[i].to(generator_device) # Extract source modality for the input
-
-                label_org = torch.zeros(x_real.size(0), num_domains + num_aug_domains) # Label of source domain
-                label_org[:,index] = 1.0
-                label_org = label_org.to(generator_device)
-                new_idx = num_domains + index
-
-                label_trg = torch.zeros(x_real.size(0), num_domains + num_aug_domains)# label of target domain (shifted with just K_s)
-                label_trg[:,new_idx] = 1.0
-                label_trg = label_trg.to(generator_device)
-
-                # Original-to-target domain.
-
-                x_fake = G(x_real, label_trg).to(generator_device)
-
-
-                # Store all fake images
-                if index == 0 or (modality_indices[0] == 1 and index == 1):
-                    full_fakes = x_fake
-                    #fakes = x_fake[:,0,:,:].unsqueeze(1)
-                    fakes = torch.mean(x_fake, dim=1, keepdim=True)
-                elif index == 1:
-                    full_fakes = torch.cat((full_fakes, x_fake), 1) # Concatenate generated domains along channel dimension
-                    #fakes = torch.cat((fakes, x_fake[:,0,:,:].unsqueeze(1)), 1) # Concatenate generated domains along channel dimension
-                    fakes = torch.cat((fakes, torch.mean(x_fake, dim=1, keepdim=True)), 1) # Concatenate generated domains along channel dimension
-                else:
-                    if index == modality_indices[0]:
-                        full_fakes = x_fake
-                        fakes = x_fake
-                    else:
-
-                        full_fakes = torch.cat((full_fakes, x_fake), 1) # Concatenate generated domains along channel dimension
-                        fakes = torch.cat((fakes, x_fake), 1) # Concatenate generated domains along channel dimension
-                del x_fake, x_real, label_org, label_trg
-
-            fakes = fakes.view(args.batch_size, args.seq_len, args.n_channels, args.img_dim, args.img_dim).transpose(1, 2) # bring back to original dimensions and swap channels and sequence
-            #x_all_batch = x_all_batch.transpose(0, 1) # (C, B*S, W, H) -> (B*S, C, W, H)
-            #x_all_batch = x_all_batch.view(args.batch_size, n_channels, 16, 112, 112)
-            assert fakes.shape == (args.batch_size, args.n_channels, args.seq_len,  args.img_dim,  args.img_dim)
-        return fakes
 
 

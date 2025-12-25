@@ -60,13 +60,20 @@ def train_video_stream(dl_train, model, optimizer, criterion,
     all_time = time.perf_counter()
 
     for idx, out in enumerate(dl_train):
-        vid_seqs, labels = out["vclip"], out["label"]
+        
+        if args.model_vid == 'YOLO_mlp':
+            vid_seqs, labels = out["detection"], out["label"]
+        elif args.model_vid == 's3d_yolo_fusion':
+            vid_seqs, dets, labels = out["vclip"], out["detection"], out["label"]
+            dets = dets.to(cuda_device)
+        else:
+            vid_seqs, labels = out["vclip"], out["label"]
         batch_size = len(vid_seqs)
 
         tr_stats["time_data_loading"].update(time.perf_counter() - dl_time)
 
         # Visualize images for tensorboard.
-        if iteration == 0 or iteration == args.print_freq and not args.fine_tune_late_fusion:
+        if (iteration == 0 or iteration == args.print_freq and not args.fine_tune_late_fusion) and args.model_vid != 'YOLO_mlp':
             if args.dataset == 'sims_dataset_multimodal':
                 write_out_images(vid_seqs, writer_train, iteration, args.n_channels, args.n_channels_each_modality[0], args.n_channels_each_modality[1], args.n_modalities)
             else:
@@ -85,7 +92,10 @@ def train_video_stream(dl_train, model, optimizer, criterion,
         # Forward pass: Calculation
         s_forw_time = time.perf_counter()
 
-        scores = model(vid_seqs)
+        if args.model_vid == 's3d_yolo_fusion':  
+            scores = model(vid_seqs, dets)
+        else:
+            scores = model(vid_seqs)
 
 
         e_forw_time = time.perf_counter()
@@ -121,6 +131,8 @@ def train_video_stream(dl_train, model, optimizer, criterion,
             print_tr_stats_loc_avg(tr_stats, epoch, idx, len(dl_train), tr_stats["time_all"].local_avg)
 
         del vid_seqs, labels, scores, loss
+        if args.model_vid == 's3d_yolo_fusion':
+            del dets
 
         iteration += 1
 
@@ -156,7 +168,13 @@ def validate_video_stream(data_loader, model, criterion, cuda_device, epoch, arg
 
     with torch.no_grad():
         for idx, out in enumerate(data_loader):
-            vid_seqs, labels = out["vclip"], out["label"]
+            if args.model_vid == 'YOLO_mlp':
+                vid_seqs, labels = out["detection"], out["label"]
+            elif args.model_vid == 's3d_yolo_fusion':
+                vid_seqs, dets, labels = out["vclip"], out["detection"], out["label"]
+                dets = dets.to(cuda_device)
+            else:
+                vid_seqs, labels = out["vclip"], out["label"]
             batch_size = len(vid_seqs)
 
             val_stats["time_data_loading"].update(time.perf_counter() - start_time)
@@ -168,7 +186,10 @@ def validate_video_stream(data_loader, model, criterion, cuda_device, epoch, arg
             val_stats["time_cuda_transfer"].update(time.perf_counter() - start_time)
             start_time = time.perf_counter()
 
-            scores = model(vid_seqs)
+            if args.model_vid == 's3d_yolo_fusion':  
+                scores = model(vid_seqs, dets)
+            else:
+                scores = model(vid_seqs)
 
             val_stats["time_forward"].update(time.perf_counter() - start_time)
 
@@ -184,7 +205,9 @@ def validate_video_stream(data_loader, model, criterion, cuda_device, epoch, arg
             val_stats["accuracy"]["top5"].update(top5.item(), batch_size)
 
             del scores, labels, loss
-
+            if args.model_vid == 's3d_yolo_fusion':
+                del dets
+ 
             val_stats["time_all"].update(time.perf_counter() - all_time)
 
             start_time = time.perf_counter()

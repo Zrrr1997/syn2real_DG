@@ -1,5 +1,5 @@
 """
-This model is an extension for late fusion of the implementation of https://github.com/kylemin/S3D.
+This model is an extension for late fusion with YOLO_mlp of the implementation of https://github.com/kylemin/S3D.
 """
 import os
 
@@ -8,35 +8,39 @@ import torch.nn.functional as F
 from torch import nn
 
 
-class late_fusion_S3D(nn.Module):
-    def __init__(self, num_class, modelA, modelB, concat_features, channels):
-        super(late_fusion_S3D, self).__init__()
-        self.modelA = modelA
-        self.modelB = modelB
-        self.fc = nn.Linear(concat_features, 10)
-        self.channels = channels
+class s3d_YOLO_fusion(nn.Module):
+    def __init__(self, num_class, s3d_model, yolo_model, s3d_features):
+        super(s3d_YOLO_fusion, self).__init__()
+        self.s3d_model = s3d_model
+        self.yolo_model = yolo_model
+
+        #self.fc = nn.Linear(s3d_features, num_class)
 
 
-    def forward(self, x1x2):
-        with torch.no_grad():
-            x1 = self.modelA.base(x1x2[:, 0:self.channels[0]])
-            x2 = self.modelB.base(x1x2[:, self.channels[0]:])
-            y1 = F.avg_pool3d(x1, (2, x1.size(3), x1.size(4)), stride=1)
-            y2 = F.avg_pool3d(x2, (2, x2.size(3), x2.size(4)), stride=1)
-        x1 = self.modelA.fc(y1)
+    def forward(self, img, det):
+        with torch.no_grad(): # Freeze initial s3d network without top layers
+           x1 = self.s3d_model.base(img)
+           y1 = F.avg_pool3d(x1, (2, x1.size(3), x1.size(4)), stride=1)
+        x1 = self.s3d_model.fc(y1)
         x1 = x1.view(x1.size(0), x1.size(1), x1.size(2))
-        x1 = torch.mean(x1, 2)
+        x_s3d = torch.mean(x1, 2)
 
-        x2 = self.modelB.fc(y2)
-        x2 = x2.view(x2.size(0), x2.size(1), x2.size(2))
-        x2 = torch.mean(x2, 2)
+        with torch.no_grad(): # Freeze pre-trained YOLO
+            x_yolo = self.yolo_model(det)
 
-        x = torch.cat((x1, x2), dim=1)
-        x = self.fc(F.relu(x))
-        
+        x = F.normalize(x_s3d) + F.normalize(x_yolo)
+
         return x
-    def embed(self, x1x2):
-        return self.forward(x1x2)
+
+    def embed(self, img):
+        with torch.no_grad(): # Freeze initial s3d network without top layers
+           x1 = self.s3d_model.base(img)
+           y1 = F.avg_pool3d(x1, (2, x1.size(3), x1.size(4)), stride=1)
+           x1 = self.s3d_model.fc(y1)
+           x1 = x1.view(x1.size(0), x1.size(1), x1.size(2))
+           x_s3d = torch.mean(x1, 2)
+
+        return x_s3d
 
     def load_pretrained_unequal(self, file):
         # load the weight file and copy the parameters

@@ -399,6 +399,7 @@ class RandomRotation:
         self.threshold = p
         self.asnumpy = asnumpy
 
+
     ''' Rotation method for numpy images '''
     def rotate_image(self, image, angle):
         image_center = tuple(np.array(image.shape[1::-1]) / 2)

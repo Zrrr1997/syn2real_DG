@@ -30,5 +30,5 @@ plt.ylabel('Accuracy')
 plt.ylim(0.0, 1.1)
 plt.title(args.model_name)
 plt.grid()
-plt.savefig(os.path.join(args.log_path, args.model_name + '_val_train_acc.svg'))
-
+plt.savefig(os.path.join(args.log_path, args.model_name + '_val_train_acc.pdf'))
+f

@@ -14,10 +14,14 @@ from datasets.sims_dataset import SimsDataset
 from datasets.sims_dataset_video import SimsDataset_Video
 from datasets.sims_dataset_video_two_modalities import SimsDataset_Video_Two_Modalities
 from datasets.sims_dataset_video_multiple_modalities import SimsDataset_Video_Multiple_Modalities
+from datasets.sims_dataset_YOLO_detections import SimsDataset_YOLO_detections
+from datasets.sims_dataset_video_with_YOLO_detections import SimsDataset_Video_with_YOLO_detections
 from lib.C3D import C3D
 from lib.i3d_hassony import I3D, Unit3Dpy
 from lib.s3d import S3D
 from lib.late_fusion_s3d import late_fusion_S3D
+from lib.s3d_yolo_fusion import s3d_YOLO_fusion
+from lib.YOLO_mlp import YOLO_mlp
 from testing.test_video_stream import test_video_stream as test_vs
 from training.train_video_stream import training_loop_video_stream as train_vs
 from utils.utils import copy_file_backup
@@ -30,7 +34,7 @@ parser.add_argument('--exp-num', default=None, type=int,
                     help='Experiment number. This is used in the folder name: exp-{exp-num}. '
                          'Filled automatically if not set.')
 
-parser.add_argument('--exp-suffix', default=None, type=int,
+parser.add_argument('--exp-suffix', default=None, type=str,
                     help='Experiment suffix for annotations. '
                          'If set, this is also used in the folder name: exp-{exp-num}_{exp-suffix}.')
 
@@ -44,7 +48,7 @@ parser.add_argument('--loader_workers', default=16, type=int,
 parser.add_argument('--epochs', default=200, type=int, help='number of total epochs to run.')
 parser.add_argument('--batch_size', default=28, type=int, help="Make batch size divisible by GPU count.")
 
-parser.add_argument('--dataset', default='sims', choices=["sims", "adl", "nturgbd", "sims_video", "sims_video_multimodal"], type=str)
+parser.add_argument('--dataset', default='sims', choices=["sims", "adl", "nturgbd", "sims_video", "sims_video_multimodal", "YOLO_detections_only", "sims_video_with_YOLO_detections"], type=str)
 parser.add_argument('--num_classes', default=10, type=int, help='Number of classes for the classification task.')
 
 parser.add_argument('--split-policy', default='frac',
@@ -76,18 +80,30 @@ parser.add_argument('--n_modalities', default=1, type=int, help="The number of m
 parser.add_argument('--modality', default="heatmaps", type=str, help="The modality on which to train on (or test).")
 parser.add_argument('--second_modality', default="limbs", type=str, help="The second modality on which to train on (or test).")
 parser.add_argument('--modalities', default=['rgb'], type=str, nargs='+', help="The set of modalities on which to train on (or test).")
-parser.add_argument('--dataset_roots', default=['/cvhci/temp/zmarinov/rgb'], type=str, nargs='+', help="The set of dataset root folders on which to train on (or test).")
+parser.add_argument('--dataset_roots', default=None, type=str, nargs='+', help="The set of dataset root folders on which to train on (or test).")
+parser.add_argument('--eval_datasets', default=None, type=str, nargs='+', help="The set of dataset root folders on which to evaluate on (validate and test).")
 parser.add_argument('--n_channels_each_modality', default=[3], type=int, nargs='+', help="Number of channels for each modality.")
 
 
-parser.add_argument('--model_vid', default="s3d", type=str, choices=["s3d", "s3dg", "i3d", "r2+1d", "r18"],
+parser.add_argument('--model_vid', default="s3d", type=str, choices=["s3d", "s3dg", "i3d", "r2+1d", "r18", "YOLO_mlp", "s3d_yolo_fusion"],
                     help="The model for the video backbone.")
+
+parser.add_argument('--yolo_arch', default='SimpleNet',
+                    choices=["SimpleNet", "BaseNet", "TanyaNet", "PyramidNet", "LongNet", "LastNet"], type=str,
+                    help="Type of MLP architecture to use for the YOLO_mlp")
+
 parser.add_argument('--pretrained_model_i3d', default=None, type=str, help="Pre-trained I3D model.")
 parser.add_argument('--pretrained_model_s3d', default=None, type=str, help="Pre-trained S3D model.")
 parser.add_argument('--first_pretrained_model', default=None, type=str, help="Pre-trained S3D model for the first modality for late fusion fine tuning.")
 parser.add_argument('--second_pretrained_model', default=None, type=str, help="Pre-trained S3D model for the second modality for late fusion fine tuning.")
 parser.add_argument('--pretrained_fusion_model', default=None, type=str, help="Pre-trained late fusion model")
 parser.add_argument('--pretrained_model_c3d', default=None, type=str, help="Pre-trained C3D model.")
+parser.add_argument('--pretrained_YOLO_mlp', default=None, type=str, help="Pre-trained YOLO_mlp model.")
+parser.add_argument('--pretrained_s3d_yolo_fusion', default=None, type=str, help="Pre-trained s3d_yolo_fusion model.")
+parser.add_argument('--G_path', default=None, type=str, help="Pre-trained domain generator.")
+
+parser.add_argument('--zeroed_modality', default=None, type=int, help='Multiply the modality channels by zero.')
+# '/home/zmarinov/repos/L2A-OT/checkpoints/second_GAN/GAN_training_second_paper_lambdasG_iteration_27000.pth'
 
 parser.add_argument('--model_body', default="skelemotion", type=str, choices=["skelemotion"],
                     help="The model for the body motion backbone.")
@@ -98,6 +114,13 @@ parser.add_argument('--asnumpy',  action='store_true', default=False,
                     help="True if input images are numpy arrays instead of PIL images (needed for multimodal training with multiple channels, unsupported by PIL).")
 parser.add_argument('--fine_tune_late_fusion',  action='store_true', default=False,
                     help="True if you want to fine-tune two modality models only with the last classification layer.")
+parser.add_argument('--fine_tune_s3d',  action='store_true', default=False,
+                    help="True if you want to fine-tune top layers of s3d model.")
+parser.add_argument('--fine_tune_yolo_mlp',  action='store_true', default=False,
+                    help="True if you want to fine-tune yolo_mlp submodel.")
+parser.add_argument('--fine_tune_kinetics',  action='store_true', default=False,
+                    help="True if you want to fine-tune the top layers of the s3d model and freeze all other layers")
+
 
 parser.add_argument('--training_focus', default='all', type=str, choices=["all", "last"],
                     help='This applies to fine-tuning. Whether to train the full model or only the last layers.')
@@ -145,6 +168,9 @@ parser.add_argument('--second_modality_dataset', default=os.path.expanduser("~/d
                     help="Root folder of the video frames for the second modality dataset.")
 parser.add_argument('--dataset-skele-motion-root', default=os.path.expanduser("~/datasets/sims_dataset/skele-motion"),
                     type=str, help="Root folder for the skelemotion data for this dataset.")
+parser.add_argument('--detections_root', default=None, type=str,
+                    help="Root folder of the YOLO detections for the dataset.")
+
 
 parser.add_argument('--aug_rotation_range', default=[20.], type=float, nargs='+')
 
@@ -165,10 +191,12 @@ def argument_checks(args):
     """
     assert args.batch_size % len(args.gpu) == 0, "Batch size has to be divisible by GPU count."
     assert args.loader_workers >= 0
-    if args.n_modalities == 1 and not args.dataset == 'sims_video_multimodal':
-        assert args.n_channels == args.n_channels_first_modality 
-    if args.n_modalities == 2 and not args.dataset == 'sims_video_multimodal':
-        assert args.n_channels == args.n_channels_first_modality + args.n_channels_second_modality
+    if args.model_vid != 'YOLO_mlp':
+        if args.n_modalities == 1 and not args.dataset == 'sims_video_multimodal':
+            assert args.n_channels == args.n_channels_first_modality 
+        if args.n_modalities == 2 and not args.dataset == 'sims_video_multimodal':
+            assert args.n_channels == args.n_channels_first_modality + args.n_channels_second_modality
+        assert args.dataset != "YOLO_detections_only"
 
     return args
 
@@ -202,8 +230,11 @@ def main():
     # Setup cuda
     cuda_device, args.gpu = check_and_prepare_cuda(args.gpu)
 
+
     # Prepare model
-    model = select_and_prepare_model(args)
+    model = select_and_prepare_model(args).to(cuda_device)
+
+
 
     # Data Parallel uses a master device (default gpu 0)
     # and performs scatter gather operations on batches and resulting gradients.
@@ -284,11 +315,12 @@ def select_and_prepare_model(args):
             model.load_pretrained_unequal(args.pretrained_fusion_model)      
         return model
  
-    if args.model_vid == 's3d':
+    elif args.model_vid == 's3d':
         print("Using the S3D model.")
         model = S3D(num_class=args.num_classes, n_input_channels=args.n_channels)
         if args.pretrained_model_s3d:
             model.load_pretrained_unequal(args.pretrained_model_s3d)
+            #model.load_state_dict(torch.load(args.pretrained_model_s3d))
     elif args.model_vid == "i3d":
         print("Using the I3D model.")
         if not args.pretrained_model_i3d:
@@ -319,6 +351,25 @@ def select_and_prepare_model(args):
             print("Successfully loaded model.")
 
         model.fc8 = torch.nn.Linear(4096, args.num_classes)
+    elif args.model_vid == "YOLO_mlp":
+        print("Using the YOLO_mlp model.")
+        model = YOLO_mlp(num_class=10, arch=args.yolo_arch)
+        if args.test_only:
+            model.load_pretrained_unequal(args.pretrained_YOLO_mlp)  
+    elif args.model_vid == "s3d_yolo_fusion":
+        print("Using the s3d_yolo_fusion model.")
+        s3d_model = S3D(num_class=args.num_classes, n_input_channels=args.n_channels_first_modality)
+        yolo_mlp_model = YOLO_mlp(num_class=10)
+
+        if not args.test_only:
+            assert args.first_pretrained_model and args.second_pretrained_model
+            s3d_model.load_pretrained_unequal(args.first_pretrained_model)
+            yolo_mlp_model.load_pretrained_unequal(args.second_pretrained_model)
+
+        model = s3d_YOLO_fusion(10, s3d_model, yolo_mlp_model, 1024)
+
+        if args.test_only:
+            model.load_pretrained_unequal(args.pretrained_s3d_yolo_fusion)  
     else:
         raise ValueError(f'model {args.model_vid} not implemented!')
 
@@ -336,7 +387,8 @@ def prepare_augmentations(augmentation_settings, args):
     color_jitter_trans = utils.augmentation.ColorJitter(brightness=augmentation_settings["val_range"], contrast=0,
                                        saturation=augmentation_settings["sat_range"],
                                        hue=augmentation_settings["hue_range"])
-    if args.n_modalities == 1:
+    if args.n_modalities == 1 and not args.asnumpy:
+
         transform_train = transforms.Compose([
             utils.augmentation.RandomRotation(degree=augmentation_settings["rot_range"], asnumpy=args.asnumpy),
             utils.augmentation.RandomSizedCrop(size=args.img_dim, crop_area=augmentation_settings["crop_arr_range"],
@@ -377,7 +429,30 @@ def prepare_augmentations(augmentation_settings, args):
 
 
 def get_data(vid_transform, mode='train', args=None, random_state=42, color_jitter_trans=None):
-    if args.dataset == 'sims':
+    if args.eval_datasets is not None and mode != 'train':
+
+        dataset = SimsDataset_Video_Multiple_Modalities(dataset_root=args.eval_datasets,
+                             split_mode=mode,
+                             split_train_file=args.train_split_file,
+                             vid_transform=vid_transform,
+                             seq_len=args.seq_len,
+                             seq_shifts=args.sampling_shift,
+                             downsample_vid=args.ds_vid,
+                             split_policy=args.split_policy,
+                             sample_limit=args.max_samples,
+                             use_cache=not args.no_cache,
+                             per_class_samples=args.per_class_samples,
+                             random_state=random_state,
+                             n_channels=args.n_channels,
+                             color_jitter=(args.modality=='rgb' or args.second_modality=='rgb') and (not args.no_augmentation),
+                             color_jitter_trans=color_jitter_trans,
+                             modalities=args.modalities,
+                             dataset_roots=args.eval_datasets,
+                             n_channels_each_modality=args.n_channels_each_modality,
+                             test_on_sims=args.test_on_sims,
+                             fine_tune_late_fusion=args.fine_tune_late_fusion,
+                             zeroed_modality=args.zeroed_modality)
+    elif args.dataset == 'sims':
         dataset = SimsDataset(dataset_root=args.dataset_video_root,
                               split_mode=mode,
                               split_train_file=args.train_split_file,
@@ -460,7 +535,46 @@ def get_data(vid_transform, mode='train', args=None, random_state=42, color_jitt
                              dataset_roots=args.dataset_roots,
                              n_channels_each_modality=args.n_channels_each_modality,
                              test_on_sims=args.test_on_sims,
-                             fine_tune_late_fusion=args.fine_tune_late_fusion)
+                             fine_tune_late_fusion=args.fine_tune_late_fusion,
+                             zeroed_modality=args.zeroed_modality)
+    elif args.dataset == 'YOLO_detections_only':
+        dataset = SimsDataset_YOLO_detections(dataset_root=args.dataset_video_root,
+                             detection_path=args.detections_root,
+                             split_mode=mode,
+                             split_train_file=args.train_split_file,
+                             vid_transform=vid_transform,
+                             seq_len=args.seq_len,
+                             seq_shifts=args.sampling_shift,
+                             downsample_vid=args.ds_vid,
+                             split_policy=args.split_policy,
+                             sample_limit=args.max_samples,
+                             use_cache=not args.no_cache,
+                             color_jitter=(args.modality=='rgb' or args.second_modality=='rgb') and (not args.no_augmentation),
+                             color_jitter_trans=color_jitter_trans,
+                             per_class_samples=args.per_class_samples,
+                             random_state=random_state,
+                             test_on_sims=args.test_on_sims,
+                             modality=args.modality)
+    elif args.dataset == 'sims_video_with_YOLO_detections':
+        dataset = SimsDataset_Video_with_YOLO_detections(dataset_root=args.dataset_video_root,
+                             detection_path=args.detections_root,
+                             split_mode=mode,
+                             split_train_file=args.train_split_file,
+                             vid_transform=vid_transform,
+                             seq_len=args.seq_len,
+                             seq_shifts=args.sampling_shift,
+                             downsample_vid=args.ds_vid,
+                             split_policy=args.split_policy,
+                             sample_limit=args.max_samples,
+                             use_cache=not args.no_cache,
+                             color_jitter=(args.modality=='rgb' or args.second_modality=='rgb') and (not args.no_augmentation),
+                             color_jitter_trans=color_jitter_trans,
+                             per_class_samples=args.per_class_samples,
+                             random_state=random_state,
+                             test_on_sims=args.test_on_sims,
+                             modality=args.modality,
+                             n_channels=args.n_channels,
+                             n_channels_first_modality=args.n_channels_first_modality)
     else:
         raise ValueError('dataset not supported')
 
@@ -513,9 +627,12 @@ def check_and_prepare_parameters(model, args):
             if args.model_vid == "i3d":
                 if "conv3d_0c_1x1" not in name:
                     param.requires_grad = False
-        if args.fine_tune_late_fusion:
-            if "fc" not in name:
+        if args.fine_tune_late_fusion or args.fine_tune_kinetics or args.model_vid == 's3d_yolo_fusion' or args.fine_tune_s3d:
+            if "fc" not in name or 'yolo' in name:
                     param.requires_grad = False
+        if args.fine_tune_yolo_mlp:
+            if "yolo" in name:
+                    param.requires_grad = True
         print(name, param.requires_grad)
     print('=================================\n')
 
@@ -606,7 +723,7 @@ def set_path(args):
                 args.exp_num = 1
 
         exp_path = os.path.join(f"{args.exp_root}", f"exp_{args.exp_num}"
-                                + ("_{args.exp_suffix}" if args.exp_suffix is not None else ""))
+                                + (f"_{args.exp_suffix}" if args.exp_suffix is not None else ""))
 
     log_path = os.path.join(exp_path, 'logs')
     model_path = os.path.join(exp_path, 'model')
