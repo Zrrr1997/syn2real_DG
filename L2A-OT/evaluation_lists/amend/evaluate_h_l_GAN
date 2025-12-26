@@ -1,0 +1,2 @@
+main_SIMS_S3D.py --exp_tag h_l_GAN_40000 --pretrained_model_DGC checkpoints/heatmaps_and_limbs_GAN/DGC_iteration_40000.pth --pretrained_model_G checkpoints/heatmaps_and_limbs_GAN/G_iteration_40000.pth --gpu 3 3  --test_classifier_only --modality_indices 0 1 --logs ./logs/EVAL/
+main_SIMS_S3D.py --exp_tag h_l_GAN_45000 --pretrained_model_DGC checkpoints/heatmaps_and_limbs_GAN/DGC_iteration_45000.pth --pretrained_model_G checkpoints/heatmaps_and_limbs_GAN/G_iteration_45000.pth --gpu 3 3  --test_classifier_only --modality_indices 0 1 --logs ./logs/EVAL/

@@ -1,0 +1,13 @@
+#!/bin/bash
+
+#your input file
+input=$1
+
+#your python script
+py_script=$2
+
+# use each line of the file `input` as argument of your script     
+while read line
+do
+  python3 $line
+done < "$input"

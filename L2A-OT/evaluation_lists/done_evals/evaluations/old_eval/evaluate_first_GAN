@@ -1,0 +1,13 @@
+main_SIMS_S3D.py --exp_tag first_10000 --pretrained_model_s3d checkpoints/first_exp_models/best_val_C_26000.tar --pretrained_model_G checkpoints/first_exp_models/G_iteration_10000.pth --gpu 2 3 --test_classifier_only
+main_SIMS_S3D.py --exp_tag first_20000 --pretrained_model_s3d checkpoints/first_exp_models/best_val_C_26000.tar --pretrained_model_G checkpoints/first_exp_models/G_iteration_20000.pth --gpu 2 3 --test_classifier_only
+main_SIMS_S3D.py --exp_tag first_30000 --pretrained_model_s3d checkpoints/first_exp_models/best_val_C.tar --pretrained_model_G checkpoints/first_exp_models/G_iteration_30000.pth --gpu 2 3 --test_classifier_only
+main_SIMS_S3D.py --exp_tag first_40000 --pretrained_model_s3d checkpoints/first_exp_models/best_val_C.tar --pretrained_model_G checkpoints/first_exp_models/G_iteration_40000.pth --gpu 2 3 --test_classifier_only
+main_SIMS_S3D.py --exp_tag first_50000 --pretrained_model_s3d checkpoints/first_exp_models/best_val_C.tar --pretrained_model_G checkpoints/first_exp_models/G_iteration_50000.pth --gpu 2 3 --test_classifier_only
+main_SIMS_S3D.py --exp_tag first_60000 --pretrained_model_s3d checkpoints/first_exp_models/best_val_C.tar --pretrained_model_G checkpoints/first_exp_models/G_iteration_60000.pth --gpu 2 3 --test_classifier_only
+main_SIMS_S3D.py --exp_tag first_70000 --pretrained_model_s3d checkpoints/first_exp_models/best_val_C.tar --pretrained_model_G checkpoints/first_exp_models/G_iteration_70000.pth --gpu 2 3 --test_classifier_only
+main_SIMS_S3D.py --exp_tag first_80000 --pretrained_model_s3d checkpoints/first_exp_models/best_val_C.tar --pretrained_model_G checkpoints/first_exp_models/G_iteration_80000.pth --gpu 2 3 --test_classifier_only
+main_SIMS_S3D.py --exp_tag first_90000 --pretrained_model_s3d checkpoints/first_exp_models/best_val_C.tar --pretrained_model_G checkpoints/first_exp_models/G_iteration_90000.pth --gpu 2 3 --test_classifier_only
+main_SIMS_S3D.py --exp_tag first_100000 --pretrained_model_s3d checkpoints/first_exp_models/best_val_C.tar --pretrained_model_G checkpoints/first_exp_models/G_iteration_100000.pth --gpu 2 3 --test_classifier_only
+main_SIMS_S3D.py --exp_tag first_110000 --pretrained_model_s3d checkpoints/first_exp_models/best_val_C.tar --pretrained_model_G checkpoints/first_exp_models/G_iteration_110000.pth --gpu 2 3 --test_classifier_only
+main_SIMS_S3D.py --exp_tag first_120000 --pretrained_model_s3d checkpoints/first_exp_models/best_val_C.tar --pretrained_model_G checkpoints/first_exp_models/G_iteration_120000.pth --gpu 2 3 --test_classifier_only
+

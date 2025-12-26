@@ -19,3 +19,14 @@ output
 experiments
 cache
 training_arguments
+
+# L2A-OT domain generator exclusions
+L2A-OT/runs/
+L2A-OT/logs/
+L2A-OT/results_first_GAN/
+L2A-OT/video_examples/
+L2A-OT/embeddings/
+L2A-OT/deprecated/
+L2A-OT/cache_ADL/
+L2A-OT/DEBUG/
+L2A-OT/video_paths_*.txt
