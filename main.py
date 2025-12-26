@@ -103,7 +103,7 @@ parser.add_argument('--pretrained_s3d_yolo_fusion', default=None, type=str, help
 parser.add_argument('--G_path', default=None, type=str, help="Pre-trained domain generator.")
 
 parser.add_argument('--zeroed_modality', default=None, type=int, help='Multiply the modality channels by zero.')
-# '/home/zmarinov/repos/L2A-OT/checkpoints/second_GAN/GAN_training_second_paper_lambdasG_iteration_27000.pth'
+# Example: --G_path L2A-OT/checkpoints/<exp_tag>/G_iteration_30000.pth
 
 parser.add_argument('--model_body', default="skelemotion", type=str, choices=["skelemotion"],
                     help="The model for the body motion backbone.")

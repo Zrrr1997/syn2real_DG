@@ -81,7 +81,7 @@ if __name__ == "__main__":
     from torchvision import transforms
 
     trans = transforms.Compose([uaug.RandomSizedCrop(size=128, crop_area=(0.5, 0.5), consistent=True), uaug.ToTensor()])
-    genad = SimsDataset_Video(dataset_root=os.path.expanduser("/cvhci/temp/zmarinov/ADL_rgb/"), vid_transform=trans,
+    genad = SimsDataset_Video(dataset_root="/path/to/rgb", vid_transform=trans,
                         split_mode="test", use_cache=False, n_channels=3, modality='rgb')
     print(len(genad))
     print(genad[0]['vclip'].shape)

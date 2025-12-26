@@ -88,7 +88,7 @@ if __name__ == "__main__":
     from torchvision import transforms
 
     trans = transforms.Compose([uaug.RandomSizedCrop(size=128, crop_area=(0.5, 0.5), consistent=True), uaug.ToTensor()])
-    genad = SimsDataset_Video(dataset_root=os.path.expanduser("/cvhci/temp/zmarinov/joints_and_limbs/heatmaps"), vid_transform=trans,
+    genad = SimsDataset_Video(dataset_root="/path/to/heatmaps", vid_transform=trans,
                         split_mode="train", use_cache=False, n_channels=1)
     print(len(genad))
     print(genad[0]['vclip'].shape)

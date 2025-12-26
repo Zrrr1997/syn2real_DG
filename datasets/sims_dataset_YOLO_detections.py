@@ -84,7 +84,7 @@ if __name__ == "__main__":
     color_jitter_trans = transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1)
 
     trans = transforms.Compose([uaug.RandomSizedCrop(size=128, crop_area=(0.5, 0.5), consistent=True, asnumpy=True), uaug.ToTensor()])
-    genad = SimsDataset_Video_with_YOLO_detections(dataset_root="/cvhci/temp/zmarinov/rgb", use_cache=False, vid_transform=trans, modality="rgb", n_channels=3, n_channels_first_modality=3, color_jitter=False, color_jitter_trans=color_jitter_trans, detection_path="/home/zmarinov/repos/yolov3/runs/Sims_YOLO/")
+    genad = SimsDataset_Video_with_YOLO_detections(dataset_root="/path/to/rgb", use_cache=False, vid_transform=trans, modality="rgb", n_channels=3, n_channels_first_modality=3, color_jitter=False, color_jitter_trans=color_jitter_trans, detection_path="/path/to/yolo_detections")
     print('Length of the dataset',len(genad))
 
     print('Detection bitvector size test', genad[0]['detection'].shape)

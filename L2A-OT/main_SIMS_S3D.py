@@ -104,8 +104,8 @@ def get_args():
     #################################################################
     #                   Dataset directory arguments                 #
     #################################################################
-    train_arg_parser.add_argument('--dataset_roots', default=['/cvhci/temp/zmarinov/fixed_joints_and_limbs/heatmaps/', '/cvhci/temp/zmarinov/fixed_joints_and_limbs/limbs/', '/cvhci/temp/zmarinov/fixed_optical_flow/optical_flow/', '/cvhci/temp/zmarinov/Sims4Action/rgb'], type=str, nargs='+', help="The set of dataset root folders on which to train and validate on. (By default Sims).")
-    train_arg_parser.add_argument('--dataset_roots_test', default=['/cvhci/temp/zmarinov/ADL_joints_and_limbs/heatmaps', '/cvhci/temp/zmarinov/ADL_joints_and_limbs/limbs', '/cvhci/temp/zmarinov/ADL_optical_flow/optical_flow', '/cvhci/temp/zmarinov/ToyotaSmartHome/ADL_rgb'], type=str, nargs='+', help="The set of dataset root folders on which to test on (By default ADL).")
+    train_arg_parser.add_argument('--dataset_roots', default=None, type=str, nargs='+', help="The set of dataset root folders on which to train and validate on (e.g., /path/to/heatmaps /path/to/limbs /path/to/optical_flow /path/to/rgb).")
+    train_arg_parser.add_argument('--dataset_roots_test', default=None, type=str, nargs='+', help="The set of dataset root folders on which to test on (e.g., /path/to/adl_heatmaps /path/to/adl_limbs /path/to/adl_optical_flow /path/to/adl_rgb).")
 
     #################################################################
     #                   Loading pre-trained models                  #

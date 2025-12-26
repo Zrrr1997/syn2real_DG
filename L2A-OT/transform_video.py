@@ -60,7 +60,7 @@ def get_args():
     #                   Loading pre-trained models                  #
     #################################################################
 
-    train_arg_parser.add_argument('--pretrained_model_G', default='/home/zmarinov/repos/L2A-OT/checkpoints/second_GAN/GAN_training_second_paper_lambdasG_iteration_27000.pth', type=str, help="Pre-trained Conditional Generator model (G).")
+    train_arg_parser.add_argument('--pretrained_model_G', default=None, type=str, help="Pre-trained Conditional Generator model (G).")
 
 
     args = train_arg_parser.parse_args()

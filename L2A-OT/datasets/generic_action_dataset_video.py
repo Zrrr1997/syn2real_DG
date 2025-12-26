@@ -230,7 +230,7 @@ if __name__ == "__main__":
     from torchvision import transforms
 
     trans = transforms.Compose([uaug.RandomSizedCrop(size=128, crop_area=(0.5, 0.5), consistent=True), uaug.ToTensor()])
-    genad = GenericActionDataset_Video(dataset_root="/cvhci/temp/zmarinov/fixed_joints_and_limbs/heatmaps",
+    genad = GenericActionDataset_Video(dataset_root="/path/to/heatmaps",
                                  dataset_name="Sims Dataset",
                                  vid_transform=trans, use_cache=False)
     print(len(genad))

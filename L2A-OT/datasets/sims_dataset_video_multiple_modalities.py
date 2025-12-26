@@ -259,7 +259,7 @@ class SimsDataset_Video_Multiple_Modalities(SimsDataset_Video):
             '''
             for idx, row in video_info.iterrows():
                 vid_id = row.vid_id
-                if not os.path.exists(os.path.join('/cvhci/temp/zmarinov/YOLO/yolov3/runs/ADL_done', row.vid_path_modality_1, 'detections.csv')):
+                if not os.path.exists(os.path.join('/path/to/yolo_detections', row.vid_path_modality_1, 'detections.csv')):
                         drop_idx.append(idx)
             '''
 
@@ -294,7 +294,7 @@ if __name__ == "__main__":
     color_jitter_trans = transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1)
 
     trans = transforms.Compose([uaug.RandomSizedCrop(size=128, crop_area=(0.5, 0.5), consistent=True, asnumpy=True), uaug.ToTensor()])
-    genad = SimsDataset_Video_Multiple_Modalities(dataset_roots=["/cvhci/temp/zmarinov/fixed_joints_and_limbs/heatmaps","/cvhci/temp/zmarinov/fixed_optical_flow/optical_flow"], use_cache=False, vid_transform=trans, modalities=["heatmaps", "optical_flow"], n_channels=4, n_channels_each_modality=[1,3], color_jitter=True, color_jitter_trans=color_jitter_trans, test_on_sims=True, fine_tune_late_fusion=True)
+    genad = SimsDataset_Video_Multiple_Modalities(dataset_roots=["/path/to/heatmaps", "/path/to/optical_flow"], use_cache=False, vid_transform=trans, modalities=["heatmaps", "optical_flow"], n_channels=4, n_channels_each_modality=[1,3], color_jitter=True, color_jitter_trans=color_jitter_trans, test_on_sims=True, fine_tune_late_fusion=True)
     print('Length of the dataset',len(genad))
     for i in range(10):
         print('Image size test', genad[i]['vclip'].shape)

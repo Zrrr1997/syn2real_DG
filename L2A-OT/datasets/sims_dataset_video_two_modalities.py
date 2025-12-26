@@ -247,7 +247,7 @@ if __name__ == "__main__":
     color_jitter_trans = transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1)
 
     trans = transforms.Compose([uaug.RandomSizedCrop(size=128, crop_area=(0.5, 0.5), consistent=True, asnumpy=True), uaug.ToTensor()])
-    genad = SimsDataset_Video_Two_Modalities(dataset_root="/cvhci/temp/zmarinov/rgb", use_cache=False, vid_transform=trans, dataset_root_second_modality="/cvhci/temp/zmarinov/fixed_optical_flow/optical_flow", modality="rgb", second_modality="optical_flow", n_channels=6, n_channels_first_modality=3, n_channels_second_modality=3, color_jitter=True, color_jitter_trans=color_jitter_trans)
+    genad = SimsDataset_Video_Two_Modalities(dataset_root="/path/to/rgb", use_cache=False, vid_transform=trans, dataset_root_second_modality="/path/to/optical_flow", modality="rgb", second_modality="optical_flow", n_channels=6, n_channels_first_modality=3, n_channels_second_modality=3, color_jitter=True, color_jitter_trans=color_jitter_trans)
     print('Length of the dataset',len(genad))
 
     print('Image size test', genad[0]['vclip'].shape)
