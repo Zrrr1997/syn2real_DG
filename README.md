@@ -60,7 +60,17 @@ dataset_root/
 
 The MMGen paper trains action classifiers on synthetic data with generated novel domains to improve generalization to real-world data.
 
+### Source and Novel Modalities
+
+The domain generator transforms source modalities (top row) into novel synthetic domains (bottom row), creating a more diverse training set:
+
+![Source and Novel Modalities](assets/mmgen_modalities.png)
+
+*H: Heatmaps, L: Limbs, OF: Optical Flow. The model trains on all 8 modalities (4 source + 4 novel) but evaluates on real data.*
+
 ### Method Overview
+
+![MMGen Architecture](assets/mmgen_architecture.png)
 
 The approach uses three networks:
 1. **Frozen Classifier (C)**: Pre-trained S3D action classifier, frozen during domain generation training
@@ -198,6 +208,14 @@ Training produces:
 - `checkpoints/<exp_tag>/best_val_DGC.tar`: Best task classifier
 - `results/<exp_tag>/*.jpg`: Sample generated images
 - `runs/<exp_tag>/`: TensorBoard logs
+
+### Domain Embedding Visualization
+
+The t-SNE visualization below shows how the domain generator learns to produce novel modalities that are distinct from the source modalities, effectively diversifying the training distribution:
+
+![t-SNE Embedding Visualization](assets/mmgen_tsne.png)
+
+*Each color represents a different modality. Source and novel modalities form separate clusters, indicating the generator has learned to produce diverse but semantically consistent domains.*
 
 ---
 
