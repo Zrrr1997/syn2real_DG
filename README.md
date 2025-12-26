@@ -6,14 +6,14 @@ Repository for multimodal action recognition using synthetic data from Sims4Acti
 
 This repository contains implementations for two papers:
 
-### MMGen (IROS 2022)
+### [MMGen (IROS 2022)](https://arxiv.org/abs/2208.01910)
 **Multimodal Domain Generation for Synthetic-to-Real Activity Recognition**
 - Trains only on synthetic Sims4Action data
 - Generates novel modalities via adversarial domain generation
 - Evaluates on real Toyota Smarthome and ETRI-Activity3D datasets
 - Domain generator code in `L2A-OT/`
 
-### ModSelect (ECCV 2022)
+### [ModSelect (ECCV 2022)](https://arxiv.org/abs/2208.09414)
 **Unsupervised Modality Selection for Cross-Domain Action Recognition**
 - Selects beneficial modalities via correlation and MMD thresholds
 - Adds YOLO object detections as a 5th modality
