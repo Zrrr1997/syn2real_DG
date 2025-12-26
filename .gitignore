@@ -1,3 +1,7 @@
+borda_del/
+cache (copy)/
+paper_mmgen/
+paper_modselect/
 .Rproj.user
 .Rhistory
 .RData
