@@ -73,11 +73,11 @@ The domain generator transforms source modalities (top row) into novel synthetic
 ![MMGen Architecture](assets/mmgen_architecture.png)
 
 The approach uses three networks:
-1. **Frozen Classifier (C)**: Pre-trained S3D action classifier, frozen during domain generation training
-2. **Domain Generator (G)**: Transforms source modalities into novel synthetic domains
-3. **Task Classifier (DGC)**: S3D trained on both source and novel modalities
+1. **Frozen Classifier (AC_f)**: Pre-trained S3D action classifier, frozen during domain generation training
+2. **Task Classifier (AC)**: S3D trained on both source and novel modalities
+3. **Domain Generator (DG)**: Transforms source modalities into novel synthetic domains
 
-Additionally, a **Domain Classifier (D)** (ResNet18) is trained to distinguish modalities and provides the Sinkhorn distance loss for training G.
+Additionally, a **Domain Classifier (DC)** (ResNet18 - not visible in the picture) is trained to distinguish modalities and provides the Sinkhorn distance loss for training G.
 
 ### Training Pipeline
 
