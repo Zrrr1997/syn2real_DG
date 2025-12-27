@@ -83,6 +83,12 @@ Additionally, a **Domain Classifier (D)** (ResNet18) is trained to distinguish m
 
 The paper evaluates all 15 modality combinations. Below we show the full 4-modality example.
 
+**Prerequisites for L2A-OT:** Download ResNet18 pretrained weights for the domain classifier:
+```bash
+cd L2A-OT/checkpoints
+wget https://download.pytorch.org/models/resnet18-5c106cde.pth
+```
+
 #### Step 1: Pre-train Action Classifier on Source Modalities
 
 Train an S3D classifier using early fusion (channel concatenation) on Sims4Action:
@@ -100,11 +106,11 @@ python main.py --gpu 0 1 \
     --seq_len 16
 ```
 
-This produces a checkpoint (e.g., `experiments/<exp>/checkpoints/best_bal_acc_model.tar`) used as the frozen classifier C.
+This produces a checkpoint at `experiments/<exp>/model/model_best_val_acc.pth.tar`, used as the frozen classifier C.
 
-#### Step 2: Train Domain Classifier (D)
+#### Step 2: Train Domain Classifier (D), Generator (G), and Task Classifier (DGC)
 
-In L2A-OT, train ResNet18 to classify which modality each frame belongs to:
+Train all components in a single run. The script first trains D for `num_iterations_D` iterations, then jointly trains G and DGC for `num_iterations_G` iterations:
 
 ```bash
 cd L2A-OT
@@ -114,25 +120,8 @@ python main_SIMS_S3D.py \
     --modality_indices 0 1 2 3 \
     --dataset_roots /path/to/sims/heatmaps /path/to/sims/limbs /path/to/sims/optical_flow /path/to/sims/rgb \
     --dataset_roots_test /path/to/adl/heatmaps /path/to/adl/limbs /path/to/adl/optical_flow /path/to/adl/rgb \
+    --pretrained_model_C ../experiments/<exp>/model/model_best_val_acc.pth.tar \
     --num_iterations_D 1000 \
-    --num_iterations_G 0 \
-    --exp_tag D_training_h_l_of_rgb
-```
-
-#### Step 3: Train Generator (G) + Task Classifier (DGC)
-
-Train the domain generator and task classifier jointly:
-
-```bash
-cd L2A-OT
-python main_SIMS_S3D.py \
-    --gpu 0 1 \
-    --modalities heatmaps limbs optical_flow rgb \
-    --modality_indices 0 1 2 3 \
-    --dataset_roots /path/to/sims/heatmaps /path/to/sims/limbs /path/to/sims/optical_flow /path/to/sims/rgb \
-    --dataset_roots_test /path/to/adl/heatmaps /path/to/adl/limbs /path/to/adl/optical_flow /path/to/adl/rgb \
-    --pretrained_model_C /path/to/pretrained_s3d.tar \
-    --num_iterations_D 10 \
     --num_iterations_G 30000 \
     --test_every 500 \
     --save_img_every 1000 \
@@ -142,7 +131,9 @@ python main_SIMS_S3D.py \
 
 The frozen classifier C (`--pretrained_model_C`) provides the classification loss to ensure generated domains preserve action semantics.
 
-#### Step 4: Evaluate on Real Data
+**Note:** D is reinitialized each run, so there's no benefit to training D separately. Always train D, G, and DGC together.
+
+#### Step 3: Evaluate on Real Data
 
 Evaluate the trained task classifier on Toyota Smarthome or ETRI:
 
