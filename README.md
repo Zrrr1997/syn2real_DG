@@ -108,9 +108,9 @@ python main.py --gpu 0 1 \
 
 This produces a checkpoint at `experiments/<exp>/model/model_best_val_acc.pth.tar`, used as the frozen classifier C.
 
-#### Step 2: Train Domain Classifier (D), Generator (G), and Task Classifier (DGC)
+#### Step 2: Train Domain Classifier (DC), Generator (DG), and Task Classifier (AC)
 
-Train all components in a single run. The script first trains D for `num_iterations_D` iterations, then jointly trains G and DGC for `num_iterations_G` iterations:
+Train all components in a single run. The script first trains DC for `num_iterations_D` iterations, then jointly trains DG and AC for `num_iterations_G` iterations:
 
 ```bash
 cd L2A-OT
@@ -129,9 +129,9 @@ python main_SIMS_S3D.py \
     --batch_size 6
 ```
 
-The frozen classifier C (`--pretrained_model_C`) provides the classification loss to ensure generated domains preserve action semantics.
+The frozen classifier AC_f (`--pretrained_model_C`) provides the classification loss to ensure generated domains preserve action semantics.
 
-**Note:** D is reinitialized each run, so there's no benefit to training D separately. Always train D, G, and DGC together.
+**Note:** DC is reinitialized each run, so there's no benefit to training DC separately. Always train DC, DG, and AC together.
 
 #### Step 3: Evaluate on Real Data
 
