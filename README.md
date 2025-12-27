@@ -341,7 +341,66 @@ The paper proposes selecting modalities based on:
 
 **Thresholds:** The Winsorized Mean (λ=0.2) is used to compute selection thresholds. Modalities are selected if they meet either criterion (high ρ OR low MMD).
 
-**Note:** The MMD/correlation analysis code is not included in this repository. The methodology is described in the paper. Users can compute these metrics using the saved embeddings (`*_embeddings.npy`) and scores (`*_scores.npy`) from Step 2.
+### Analysis Scripts
+
+The `utils/modselect_analysis/` directory contains scripts for computing MMD, visualizing embeddings, and analyzing the relationship between domain discrepancy and performance.
+
+#### Step 1: Compute Mean Embeddings
+
+After testing classifiers (Step 2 above), compute mean embedding vectors for each modality:
+
+```bash
+python utils/modselect_analysis/mean_embedding.py \
+    --embeddings_path experiments/<exp>/logs/results_test_*_embeddings.npy \
+    --save_path results/<dataset>/<modality>/mean_vec.npy
+```
+
+#### Step 2: Compute MMD Matrix
+
+Compute MMD between all modality pairs using mean embeddings:
+
+```bash
+python utils/modselect_analysis/mmd_table.py --datasets Sims Toyota
+# Outputs: MMD_tables/mmd_Sims_Toyota.npy, .svg, .pdf
+```
+
+The MMD is computed as the Euclidean distance between mean embedding vectors (linear kernel). YOLO is excluded due to different embedding dimensionality.
+
+#### Step 3: Visualize Embeddings (Optional)
+
+Generate t-SNE visualizations of classifier embeddings:
+
+```bash
+python utils/modselect_analysis/tsne.py \
+    --embeddings_path results/Sims/heatmaps/*_embeddings.npy \
+    --labels_path results/Sims/*_labels.npy \
+    --save_path tsne_plots/sims_heatmaps.svg
+```
+
+#### Step 4: Analyze Discrepancy vs Performance
+
+Plot the relationship between domain discrepancy metrics and late fusion performance:
+
+```bash
+# Correlation vs Performance comparison
+python utils/modselect_analysis/line_plot_performance_discrepancy.py
+
+# MMD/Energy Distance vs Performance comparison
+python utils/modselect_analysis/line_plot_similarity_discrepancy.py
+```
+
+These scripts expect precomputed data in `correlations/`, `MMD_tables/`, and `performance/` directories.
+
+#### Analysis Scripts Reference
+
+| Script | Purpose |
+|--------|---------|
+| `mean_embedding.py` | Compute mean embedding vector from saved embeddings |
+| `mmd_table.py` | Compute and visualize MMD matrix between modalities |
+| `energy_dist.py` | Compute energy distance between embedding distributions |
+| `tsne.py` | Generate t-SNE visualizations of embeddings |
+| `line_plot_performance_discrepancy.py` | Plot correlation vs late fusion performance |
+| `line_plot_similarity_discrepancy.py` | Plot MMD/energy distance vs performance |
 
 ### Implementation Details (from paper)
 
@@ -349,6 +408,7 @@ The paper proposes selecting modalities based on:
 - Evaluation metric: Mean per-class accuracy (balanced accuracy)
 - Late fusion operates on class probability scores
 - YOLO not included in MMD experiments (different embedding size from S3D)
+- Energy distance requires the `dcor` library
 
 ---
 
@@ -431,6 +491,14 @@ tensorboard --logdir L2A-OT/runs/<exp_tag>
 ├── training/               # Training loops
 ├── testing/                # Evaluation scripts
 ├── utils/                  # Preprocessing and fusion utilities
+│   ├── late_fusion_*.py    # Late fusion strategies (Borda, Sum, etc.)
+│   ├── generate_*.py       # Data preprocessing scripts
+│   └── modselect_analysis/ # ModSelect analysis scripts
+│       ├── mean_embedding.py   # Mean embedding computation
+│       ├── mmd_table.py        # MMD matrix computation
+│       ├── energy_dist.py      # Energy distance computation
+│       ├── tsne.py             # t-SNE visualization
+│       └── line_plot_*.py      # Discrepancy vs performance plots
 └── L2A-OT/                 # Domain generation training (MMGen)
     ├── main_SIMS_S3D.py    # Main training script (DC, DG, AC)
     ├── model.py            # Domain generator (DG) architecture (StarGAN-style)
