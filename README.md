@@ -46,13 +46,13 @@ dataset_root/
 
 ## Modalities
 
-| Modality | Channels | Description |
-|----------|----------|-------------|
-| Heatmaps (H) | 1 | Gaussian maps at AlphaPose joint locations |
-| Limbs (L) | 1 | Lines connecting skeleton joints |
-| Optical Flow (OF) | 3 | Farneback algorithm (HSV encoded) |
-| RGB | 3 | Original video frames |
-| YOLO | 80-dim | Object detection distances (ModSelect only) |
+| Modality | Model | Input | Description |
+|----------|-------|-------|-------------|
+| Heatmaps (H) | S3D | 1 ch | Gaussian maps at AlphaPose joint locations |
+| Limbs (L) | S3D | 1 ch | Lines connecting skeleton joints |
+| Optical Flow (OF) | S3D | 3 ch | Farneback algorithm (HSV encoded) |
+| RGB | S3D | 3 ch | Original video frames |
+| YOLO | MLP | 80-dim | Reciprocal distance vector to detected objects (ModSelect only) |
 
 ---
 
@@ -229,9 +229,19 @@ The t-SNE visualization below shows how the domain generator learns to produce n
 
 ## ModSelect Experiments
 
-The ModSelect paper trains unimodal classifiers and selects beneficial modalities via late fusion.
+The ModSelect paper proposes an **unsupervised modality selection** method that identifies beneficial modalities without requiring target domain labels. It trains unimodal classifiers, computes prediction correlations and embedding MMD between modalities, and uses these metrics to select modalities that improve late fusion performance.
+
+### Method Overview
+
+1. Train unimodal S3D classifiers on each modality (H, L, OF, RGB) and an MLP on YOLO detection vectors
+2. Evaluate all 31 modality combinations with late fusion strategies
+3. **ModSelect** (unsupervised): Compute prediction correlation ρ and MMD between classifier embeddings to select beneficial modalities via Winsorized Mean thresholds
+
+**YOLO Representation:** For each frame, a 80-dimensional vector **v** is computed where **v[i]** is the reciprocal Euclidean distance between the person's bounding box center and the i-th detected object's center. The vector is normalized: **v ← v/||v||**. Objects closer to the person have larger weights.
 
 ### Step 1: Train Unimodal Classifiers
+
+Train S3D classifiers for image-based modalities:
 
 ```bash
 # Heatmaps
@@ -249,24 +259,96 @@ python main.py --gpu 0 1 --dataset sims_video --modality optical_flow \
 # RGB
 python main.py --gpu 0 1 --dataset sims_video --modality rgb \
     --n_channels 3 --epochs 200 --dataset_video_root /path/to/rgb
-
-# YOLO (MLP on detection vectors)
-python main.py --gpu 0 1 --dataset YOLO_detections_only --model_vid YOLO_mlp --epochs 200
 ```
 
-### Step 2: Late Fusion Evaluation
+Train MLP for YOLO detection vectors:
 
-Combine predictions using Borda Count voting:
+```bash
+# YOLO (MLP on detection vectors)
+# Requires both RGB videos (for video indexing) and precomputed YOLO detections
+python main.py --gpu 0 1 \
+    --dataset YOLO_detections_only \
+    --model_vid YOLO_mlp \
+    --epochs 200 \
+    --dataset_video_root /path/to/rgb \
+    --detections_root /path/to/yolo_detections
+# Detection files expected at: /path/to/yolo_detections/<Action>/<video_id>/detections.csv
+```
+
+### Step 2: Test Classifiers and Generate Predictions
+
+Before late fusion, test each trained classifier to generate CSV files with predictions and embeddings:
+
+```bash
+# Test each modality (repeat for all 5 modalities)
+python main.py --gpu 0 1 --test_only \
+    --dataset sims_video --modality heatmaps --n_channels 1 \
+    --pretrained_model experiments/<exp_heatmaps>/model/model_best_val_acc.pth.tar \
+    --eval_dataset_root /path/to/target/heatmaps
+
+# For YOLO:
+python main.py --gpu 0 1 --test_only \
+    --dataset YOLO_detections_only --model_vid YOLO_mlp \
+    --pretrained_model experiments/<exp_yolo>/model/model_best_val_acc.pth.tar \
+    --dataset_video_root /path/to/target/rgb \
+    --detections_root /path/to/target/yolo_detections
+```
+
+This produces (in `experiments/<exp>/logs/`):
+- `results_test_*.csv` — Top-5 predictions per sample (for late fusion)
+- `*_embeddings.npy` — Classifier embeddings (for MMD computation)
+- `*_scores.npy` — Raw class scores (for correlation computation)
+
+### Step 3: Late Fusion Evaluation
+
+Combine predictions from multiple modalities using voting strategies. The fusion scripts expect CSV files with columns: `vid_id`, `label`, `pred1`, `pred2`, `pred3`, `pred4`, `pred5`.
+
+**Borda Count Voting:**
 
 ```bash
 python utils/late_fusion_borda_count.py \
-    --csv_roots results_h.csv results_l.csv results_of.csv results_rgb.csv results_yolo.csv \
-    --modalities heatmaps limbs optical_flow rgb yolo
+    --csv_roots results_h.csv results_l.csv results_of.csv results_rgb.csv \
+    --modalities heatmaps limbs optical_flow rgb
 ```
 
-Other fusion strategies available:
-- `utils/late_fusion_sum_square_multimodal.py`: Sum and squared sum fusion
-- `utils/late_fusion_borda_count_multimodal.py`: Multi-modal Borda Count
+**With save path (for multimodal version):**
+
+```bash
+python utils/late_fusion_borda_count_multimodal.py \
+    --csv_roots results_h.csv results_l.csv results_of.csv results_rgb.csv results_yolo.csv \
+    --modalities heatmaps limbs optical_flow rgb yolo \
+    --save_path results_fused.txt
+```
+
+### Late Fusion Strategies
+
+The paper evaluates 6 strategies. This repository implements:
+
+| Strategy | Script | Status |
+|----------|--------|--------|
+| Borda Count | `utils/late_fusion_borda_count.py` | ✓ Implemented |
+| Sum | `utils/late_fusion_sum_square_multimodal.py` | ✓ Implemented |
+| Squared Sum | `utils/late_fusion_sum_square_multimodal.py` | ✓ Implemented |
+| Product | — | Not implemented |
+| Maximum | — | Not implemented |
+| Median | — | Not implemented |
+
+### ModSelect: Unsupervised Modality Selection
+
+The paper proposes selecting modalities based on:
+1. **Prediction Correlation ρ(m,n):** High correlation between correct predictions is more likely than between wrong ones
+2. **MMD between embeddings:** Lower domain discrepancy indicates better agreement
+
+**Thresholds:** The Winsorized Mean (λ=0.2) is used to compute selection thresholds. Modalities are selected if they meet either criterion (high ρ OR low MMD).
+
+**Note:** The MMD/correlation analysis code is not included in this repository. The methodology is described in the paper. Users can compute these metrics using the saved embeddings (`*_embeddings.npy`) and scores (`*_scores.npy`) from Step 2.
+
+### Implementation Details (from paper)
+
+- Action classes: 10 (shared subset between Sims4Action, Toyota Smarthome, ETRI)
+- Evaluation metric: Mean per-class accuracy (balanced accuracy)
+- Late fusion operates on class probability scores
+- YOLO not included in MMD experiments (different embedding size from S3D)
 
 ---
 
@@ -297,13 +379,25 @@ python utils/generate_optical_flow.py \
 
 | Argument | Description |
 |----------|-------------|
-| `--dataset` | `sims_video`, `sims_video_multimodal`, `adl`, `YOLO_detections_only` |
+| `--dataset` | `sims_video`, `sims_video_multimodal`, `adl`, `YOLO_detections_only`, `sims_video_with_YOLO_detections` |
 | `--model_vid` | `s3d`, `i3d`, `YOLO_mlp`, `s3d_yolo_fusion` |
 | `--modality` | Single modality: `heatmaps`, `limbs`, `optical_flow`, `rgb` |
 | `--modalities` | Multiple modalities for early fusion |
 | `--n_channels` | Total input channels (sum of all modalities) |
 | `--G_path` | Domain generator checkpoint for inference (MMGen) |
 | `--split_policy` | `frac`, `cross-subject`, `cross-view-1`, `cross-view-2` |
+| `--test_only` | Run evaluation only (no training) |
+| `--pretrained_model` | Path to pretrained model checkpoint |
+
+### ModSelect / YOLO Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `--detections_root` | Root folder containing YOLO detection CSVs |
+| `--yolo_arch` | MLP architecture: `SimpleNet`, `BaseNet`, `TanyaNet`, `PyramidNet`, `LongNet`, `LastNet` |
+| `--pretrained_YOLO_mlp` | Pretrained YOLO MLP checkpoint |
+| `--pretrained_s3d_yolo_fusion` | Pretrained S3D+YOLO fusion model |
+| `--fine_tune_yolo_mlp` | Fine-tune YOLO MLP submodel |
 
 ### L2A-OT Specific Arguments
 
