@@ -77,7 +77,19 @@ The approach uses three networks:
 2. **Task Classifier (AC)**: S3D trained on both source and novel modalities
 3. **Domain Generator (DG)**: Transforms source modalities into novel synthetic domains
 
-Additionally, a **Domain Classifier (DC)** (ResNet18 - not visible in the picture) is trained to distinguish modalities and provides the Sinkhorn distance loss for training G.
+Additionally, a **Domain Classifier (DC)** (ResNet18) is trained to distinguish modalities and provides the Sinkhorn distance loss for training DG.
+
+### Training Dynamics
+
+1. **Phase 1 - Train DC:** The domain classifier learns to distinguish source modalities (4-way classification: H, L, OF, RGB). This creates a feature space that separates domains.
+
+2. **Phase 2 - Train DG + AC:** DC is **frozen** (eval mode). DG and AC train jointly:
+   - DG generates novel domains from source modalities
+   - The Sinkhorn distance (computed using DC's frozen features) measures how different novel domains are from source domains
+   - DG maximizes this distance (novelty loss) while AC learns to classify actions on both source and novel domains
+   - AC_f (frozen) ensures generated domains preserve action semantics
+
+**Why not alternating?** DC is not an adversary—it's a **fixed domain distance metric**. DG doesn't try to "fool" DC; instead, DG uses DC's frozen features to measure domain novelty. A stable feature space is crucial for meaningful Sinkhorn distances.
 
 ### Training Pipeline
 
@@ -106,7 +118,7 @@ python main.py --gpu 0 1 \
     --seq_len 16
 ```
 
-This produces a checkpoint at `experiments/<exp>/model/model_best_val_acc.pth.tar`, used as the frozen classifier C.
+This produces a checkpoint at `experiments/<exp>/model/model_best_val_acc.pth.tar`, used as the frozen action classifier AC_f.
 
 #### Step 2: Train Domain Classifier (DC), Generator (DG), and Task Classifier (AC)
 
@@ -127,11 +139,13 @@ python main_SIMS_S3D.py \
     --save_img_every 1000 \
     --exp_tag GAN_h_l_of_rgb \
     --batch_size 6
+# Parameter mapping:
+#   --pretrained_model_C  → AC_f (frozen action classifier)
+#   --num_iterations_D    → DC training iterations
+#   --num_iterations_G    → DG + AC joint training iterations
 ```
 
-The frozen classifier AC_f (`--pretrained_model_C`) provides the classification loss to ensure generated domains preserve action semantics.
-
-**Note:** DC is reinitialized each run, so there's no benefit to training DC separately. Always train DC, DG, and AC together.
+The frozen action classifier AC_f (`--pretrained_model_C`) provides the classification loss to ensure generated domains preserve action semantics.
 
 #### Step 3: Evaluate on Real Data
 
@@ -149,6 +163,9 @@ python main_SIMS_S3D.py \
     --pretrained_model_G checkpoints/GAN_h_l_of_rgb/G_iteration_30000.pth \
     --test_classifier_only \
     --exp_tag eval_GAN_h_l_of_rgb
+# Parameter mapping:
+#   --pretrained_model_DGC → AC (action classifier / task model)
+#   --pretrained_model_G   → DG (domain generator)
 ```
 
 Outputs balanced and unbalanced accuracy on both source and novel domains.
@@ -170,11 +187,11 @@ The paper tests all 15 combinations. Examples:
 
 ### Loss Functions
 
-The generator is trained with:
+The domain generator DG is trained with:
 - **Novelty Loss**: Maximizes Sinkhorn distance between source and novel modality distributions
 - **Diversity Loss**: Maximizes Sinkhorn distance between different novel modalities
-- **Classification Loss**: Novel modalities should be correctly classified by frozen C
-- **Cycle Loss**: Reconstruction consistency (G(G(x)) ≈ x)
+- **Classification Loss**: Novel modalities should be correctly classified by frozen AC_f
+- **Cycle Loss**: Reconstruction consistency (DG(DG(x)) ≈ x)
 
 ```
 L_DG = λ_c * L_class + λ_r * L_cycle - λ_d * (L_novelty + L_diversity)
@@ -195,8 +212,8 @@ Default: λ_c = λ_d = 1, λ_r = 10
 ### Output Files
 
 Training produces:
-- `checkpoints/<exp_tag>/G_iteration_<N>.pth`: Generator weights
-- `checkpoints/<exp_tag>/best_val_DGC.tar`: Best task classifier
+- `checkpoints/<exp_tag>/G_iteration_<N>.pth`: Domain generator (DG) weights
+- `checkpoints/<exp_tag>/best_val_DGC.tar`: Best action classifier (AC)
 - `results/<exp_tag>/*.jpg`: Sample generated images
 - `runs/<exp_tag>/`: TensorBoard logs
 
@@ -290,14 +307,14 @@ python utils/generate_optical_flow.py \
 
 ### L2A-OT Specific Arguments
 
-| Argument | Description |
-|----------|-------------|
-| `--pretrained_model_C` | Frozen classifier for classification loss |
-| `--pretrained_model_DGC` | Task classifier checkpoint |
-| `--pretrained_model_G` | Generator checkpoint |
-| `--num_iterations_D` | Domain classifier training iterations |
-| `--num_iterations_G` | Generator + task classifier training iterations |
-| `--test_classifier_only` | Evaluation mode (no training) |
+| Argument | Description | Maps to |
+|----------|-------------|---------|
+| `--pretrained_model_C` | Frozen action classifier for classification loss | AC_f |
+| `--pretrained_model_DGC` | Action classifier checkpoint | AC |
+| `--pretrained_model_G` | Domain generator checkpoint | DG |
+| `--num_iterations_D` | Domain classifier training iterations | DC |
+| `--num_iterations_G` | Domain generator + action classifier training iterations | DG + AC |
+| `--test_classifier_only` | Evaluation mode (no training) | — |
 
 ---
 
@@ -314,17 +331,17 @@ tensorboard --logdir L2A-OT/runs/<exp_tag>
 ## Project Structure
 
 ```
-├── main.py                 # Entry point for classifier training
+├── main.py                 # Entry point for action classifier (AC) training
 ├── lib/                    # Model architectures (S3D, I3D, YOLO MLP)
 ├── datasets/               # Data loaders
 ├── training/               # Training loops
 ├── testing/                # Evaluation scripts
 ├── utils/                  # Preprocessing and fusion utilities
-└── L2A-OT/                 # Domain generator training (MMGen)
-    ├── main_SIMS_S3D.py    # Main training script
-    ├── model.py            # Generator architecture (StarGAN-style)
-    ├── resnet.py           # Domain classifier (ResNet18)
-    ├── lib/                # S3D backbone
+└── L2A-OT/                 # Domain generation training (MMGen)
+    ├── main_SIMS_S3D.py    # Main training script (DC, DG, AC)
+    ├── model.py            # Domain generator (DG) architecture (StarGAN-style)
+    ├── resnet.py           # Domain classifier (DC) - ResNet18
+    ├── lib/                # S3D backbone for AC and AC_f
     └── utils/              # Sinkhorn loss, augmentation
 ```
 
